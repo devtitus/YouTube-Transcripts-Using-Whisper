@@ -1,0 +1,29 @@
+{
+  "name": "transcripts-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "execa": "^9.3.0",
+    "fastify": "^4.28.1",
+    "ffmpeg-static": "^5.2.0",
+    "pino": "^9.3.2",
+    "redis": "^5.8.0",
+    "undici": "^6.19.8",
+    "yt-dlp-exec": "^1.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.1",
+    "@types/redis": "^4.0.10",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.4"
+  }
+}
