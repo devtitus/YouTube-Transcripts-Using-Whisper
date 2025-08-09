@@ -14,6 +14,7 @@ A Node.js service for transcribing YouTube videos using Groq API with rate limit
 ## Quick Start with Docker
 
 1. **Clone and setup environment:**
+
    ```bash
    git clone <your-repo>
    cd transcripts_project
@@ -22,13 +23,14 @@ A Node.js service for transcribing YouTube videos using Groq API with rate limit
    ```
 
 2. **Start with Docker Compose:**
+
    ```bash
    docker-compose up -d
    ```
 
 3. **Test the API:**
    ```bash
-   curl 'http://localhost:8080/v1/transcripts?url=https://www.youtube.com/watch?v=jvDJ5jTamHE&language=en&model=distil-whisper-large-v3-en&sync=true'
+   curl 'http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=jvDJ5jTamHE&language=en&model=distil-whisper-large-v3-en&sync=true'
    ```
 
 ## API Usage
@@ -36,6 +38,7 @@ A Node.js service for transcribing YouTube videos using Groq API with rate limit
 ### POST /v1/transcripts
 
 **Query Parameters:**
+
 - `url` or `youtubeUrl`: YouTube video URL (required)
 - `language`: Language code (e.g., "en") (optional)
 - `model`: Whisper model (optional)
@@ -45,6 +48,7 @@ A Node.js service for transcribing YouTube videos using Groq API with rate limit
 - `sync`: Set to "true" for synchronous processing (optional)
 
 **JSON Body (alternative):**
+
 ```json
 {
   "youtubeUrl": "https://www.youtube.com/watch?v=jvDJ5jTamHE",
@@ -59,13 +63,15 @@ A Node.js service for transcribing YouTube videos using Groq API with rate limit
 ### Examples
 
 **Query Parameters:**
+
 ```bash
-curl 'http://localhost:8080/v1/transcripts?url=https://www.youtube.com/watch?v=jvDJ5jTamHE&language=en&model=distil-whisper-large-v3-en&sync=true'
+curl 'http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=jvDJ5jTamHE&language=en&model=distil-whisper-large-v3-en&sync=true'
 ```
 
 **JSON Body:**
+
 ```bash
-curl -X POST 'http://localhost:8080/v1/transcripts' \
+curl -X POST 'http://localhost:5685/v1/transcripts' \
   -H 'Content-Type: application/json' \
   -d '{
     "youtubeUrl": "https://www.youtube.com/watch?v=jvDJ5jTamHE",
@@ -77,8 +83,9 @@ curl -X POST 'http://localhost:8080/v1/transcripts' \
 ## Rate Limiting
 
 The service implements Groq's rate limits:
+
 - **20 requests/minute**: Waits until next minute
-- **7,200 audio seconds/hour**: Waits until next hour  
+- **7,200 audio seconds/hour**: Waits until next hour
 - **2,000 requests/day**: Returns 429 error
 - **28,800 audio seconds/day**: Returns 429 error
 
@@ -87,12 +94,14 @@ Rate limiting data is stored in Redis for persistence across restarts.
 ## Development
 
 **Local development:**
+
 ```bash
 npm install
 npm run dev
 ```
 
 **Build:**
+
 ```bash
 npm run build
 npm start
