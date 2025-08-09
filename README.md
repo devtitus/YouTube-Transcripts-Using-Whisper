@@ -16,7 +16,7 @@ A Node.js service for transcribing YouTube videos using Groq API with rate limit
 1. **Clone and setup environment:**
 
    ```bash
-   git clone <your-repo>
+   git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
    cd transcripts_project
    cp .env.docker .env
    # Edit .env and add your GROQ_API_KEY
