@@ -43,18 +43,121 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
 
     // Determine which transcription service to use
     const modelType = opts.modelType || cfg.defaultModelType;
-    let transcriptionMethod: "local" | "cloud";
+    let result;
     
     if (modelType === "local") {
-      transcriptionMethod = "local";
+      // Try local first, fallback to cloud if it fails
+      try {
+        app.log.info(`Using local transcription service for job ${jobId}`);
+        result = await transcribeWithLocal({
+          jobId,
+          wavPath,
+          baseDir: outBaseDir,
+          language: opts.language,
+          model: opts.model || cfg.localAsrModel,
+          youtubeUrl,
+        });
+      } catch (localError: any) {
+        app.log.warn(`Local transcription failed for job ${jobId}: ${localError.message}`);
+        
+        // Fallback to cloud service
+        if (cfg.groqApiKey) {
+          try {
+            app.log.info(`Falling back to cloud transcription service for job ${jobId}`);
+            result = await transcribeWithGroq({
+              jobId,
+              wavPath,
+              baseDir: outBaseDir,
+              language: opts.language,
+              model: opts.model || cfg.groqWhisperModel,
+              youtubeUrl,
+            });
+          } catch (cloudError) {
+            app.log.error(`Both local and cloud transcription failed for job ${jobId}`);
+            throw new Error("Unable to transcribe. Both local and cloud services failed.");
+          }
+        } else {
+          app.log.error(`Local transcription failed and no cloud service configured for job ${jobId}`);
+          throw new Error("Unable to transcribe. Local service failed and cloud service not configured.");
+        }
+      }
     } else if (modelType === "cloud") {
+      // Try cloud first, fallback to local if it fails
       if (!cfg.groqApiKey) {
         throw new Error("Cloud transcription requested but GROQ_API_KEY not configured");
       }
-      transcriptionMethod = "cloud";
+      
+      try {
+        app.log.info(`Using cloud transcription service for job ${jobId}`);
+        result = await transcribeWithGroq({
+          jobId,
+          wavPath,
+          baseDir: outBaseDir,
+          language: opts.language,
+          model: opts.model || cfg.groqWhisperModel,
+          youtubeUrl,
+        });
+      } catch (cloudError: any) {
+        app.log.warn(`Cloud transcription failed for job ${jobId}: ${cloudError.message}`);
+        
+        // Fallback to local service
+        try {
+          // Check if local service is available
+          const healthCheck = await fetch(`${cfg.localAsrBaseUrl}/healthz`);
+          if (!healthCheck.ok) {
+            throw new Error("Local ASR service is not available");
+          }
+          
+          app.log.info(`Falling back to local transcription service for job ${jobId}`);
+          result = await transcribeWithLocal({
+            jobId,
+            wavPath,
+            baseDir: outBaseDir,
+            language: opts.language,
+            model: opts.model || cfg.localAsrModel,
+            youtubeUrl,
+          });
+        } catch (localError) {
+          app.log.error(`Both cloud and local transcription failed for job ${jobId}`);
+          throw new Error("Unable to transcribe. Both cloud and local services failed.");
+        }
+      }
     } else { // auto
       if (cfg.groqApiKey) {
-        transcriptionMethod = "cloud";
+        try {
+          app.log.info(`Using cloud transcription service (auto mode) for job ${jobId}`);
+          result = await transcribeWithGroq({
+            jobId,
+            wavPath,
+            baseDir: outBaseDir,
+            language: opts.language,
+            model: opts.model || cfg.groqWhisperModel,
+            youtubeUrl,
+          });
+        } catch (cloudError: any) {
+          app.log.warn(`Cloud transcription failed in auto mode for job ${jobId}: ${cloudError.message}`);
+          
+          // Fallback to local service
+          try {
+            const healthCheck = await fetch(`${cfg.localAsrBaseUrl}/healthz`);
+            if (!healthCheck.ok) {
+              throw new Error("Local ASR service is not available");
+            }
+            
+            app.log.info(`Falling back to local transcription service (auto mode) for job ${jobId}`);
+            result = await transcribeWithLocal({
+              jobId,
+              wavPath,
+              baseDir: outBaseDir,
+              language: opts.language,
+              model: opts.model || cfg.localAsrModel,
+              youtubeUrl,
+            });
+          } catch (localError) {
+            app.log.error(`Both cloud and local transcription failed in auto mode for job ${jobId}`);
+            throw new Error("Unable to transcribe. Both cloud and local services failed.");
+          }
+        }
       } else {
         // Check if local service is available
         try {
@@ -62,36 +165,21 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
           if (!healthCheck.ok) {
             throw new Error("Local ASR service is not available");
           }
-          transcriptionMethod = "local";
-        } catch {
-          throw new Error("No transcription service available. Please configure GROQ_API_KEY or ensure local ASR service is running.");
+          
+          app.log.info(`Using local transcription service (auto mode) for job ${jobId}`);
+          result = await transcribeWithLocal({
+            jobId,
+            wavPath,
+            baseDir: outBaseDir,
+            language: opts.language,
+            model: opts.model || cfg.localAsrModel,
+            youtubeUrl,
+          });
+        } catch (localError) {
+          app.log.error(`Local transcription failed in auto mode and no cloud service configured for job ${jobId}`);
+          throw new Error("Unable to transcribe. Local service failed and cloud service not configured.");
         }
       }
-    }
-
-    let result;
-    app.log.info(`Using transcription method: ${transcriptionMethod} for job ${jobId}`);
-    
-    if (transcriptionMethod === "local") {
-      app.log.info(`Transcribing with local Python service - model: ${opts.model || cfg.localAsrModel}`);
-      result = await transcribeWithLocal({
-        jobId,
-        wavPath,
-        baseDir: outBaseDir,
-        language: opts.language,
-        model: opts.model || cfg.localAsrModel,
-        youtubeUrl,
-      });
-    } else { // cloud
-      app.log.info(`Transcribing with Groq cloud service - model: ${opts.model || cfg.groqWhisperModel}`);
-      result = await transcribeWithGroq({
-        jobId,
-        wavPath,
-        baseDir: outBaseDir,
-        language: opts.language,
-        model: opts.model || cfg.groqWhisperModel,
-        youtubeUrl,
-      });
     }
     
     const { outPrefix, jsonPath, srtPath, vttPath, txtPath } = result;
