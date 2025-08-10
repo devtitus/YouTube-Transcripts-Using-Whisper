@@ -16,11 +16,13 @@ export interface ServiceConfig {
   groqAudioBitrateKbps: number; // e.g., 32
   groqChunkSeconds: number; // e.g., 600 (10 minutes)
   groqMaxRequestMb: number; // when larger than this, chunk
+  groqTimeoutMs: number; // timeout for groq transcription requests
   // Local ASR service configuration
   localAsrBaseUrl: string; // e.g., http://localhost:5686
   localAsrModel: string; // default model for local service
   localChunkSeconds: number; // e.g., 600 (10 minutes) for local service
   localMaxFileMb: number; // when larger than this, chunk for local service
+  localTimeoutMs: number; // timeout for local transcription requests
   defaultModelType: "local" | "cloud" | "auto"; // default routing
 }
 
@@ -47,17 +49,19 @@ export function loadConfig(): ServiceConfig {
   const groqAudioBitrateKbps = Math.max(16, parseInt(process.env.GROQ_AUDIO_BITRATE_KBPS || "32", 10) || 32);
   const groqChunkSeconds = Math.max(120, parseInt(process.env.GROQ_CHUNK_SECONDS || "600", 10) || 600);
   const groqMaxRequestMb = Math.max(5, parseInt(process.env.GROQ_MAX_REQUEST_MB || "15", 10) || 15);
+  const groqTimeoutMs = Math.max(60000, parseInt(process.env.GROQ_TIMEOUT_MS || "1800000", 10) || 1800000); // Default 30 minutes
   
   // Local ASR service configuration
   const localAsrBaseUrl = process.env.LOCAL_ASR_BASE_URL || "http://localhost:5686";
   const localAsrModel = process.env.LOCAL_ASR_MODEL || "base.en";
   const localChunkSeconds = Math.max(120, parseInt(process.env.LOCAL_CHUNK_SECONDS || "600", 10) || 600);
   const localMaxFileMb = Math.max(5, parseInt(process.env.LOCAL_MAX_FILE_MB || "100", 10) || 100);
+  const localTimeoutMs = Math.max(60000, parseInt(process.env.LOCAL_TIMEOUT_MS || "1800000", 10) || 1800000); // Default 30 minutes
   const defaultModelTypeEnv = (process.env.DEFAULT_MODEL_TYPE || "auto").toLowerCase();
   const defaultModelType = (["local", "cloud", "auto"].includes(defaultModelTypeEnv) ? defaultModelTypeEnv : "auto") as "local" | "cloud" | "auto";
 
   // Only create directories that are actually needed (audio files)
   ensureDir(audioDir);
 
-  return { audioDir, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb, localAsrBaseUrl, localAsrModel, localChunkSeconds, localMaxFileMb, defaultModelType };
+  return { audioDir, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb, groqTimeoutMs, localAsrBaseUrl, localAsrModel, localChunkSeconds, localMaxFileMb, localTimeoutMs, defaultModelType };
 }

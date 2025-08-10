@@ -102,9 +102,11 @@ You can customize the service's behavior by setting environment variables in you
 | `LOCAL_ASR_MODEL` | `base.en` | The default model to use for the local service. |
 | `LOCAL_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for local service. |
 | `LOCAL_MAX_FILE_MB` | `100` | File size threshold in MB for triggering chunking (local service). |
+| `LOCAL_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for local transcription (30 minutes). |
 | `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service. |
 | `GROQ_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for cloud service. |
 | `GROQ_MAX_REQUEST_MB` | `15` | File size threshold in MB for chunking (cloud service). |
+| `GROQ_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for Groq transcription (30 minutes). |
 
 ## 🛠️ Useful Docker Commands
 

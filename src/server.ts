@@ -16,7 +16,12 @@ import { transcribeWithLocal } from "./pipeline/transcribe_local.js";
 // Redis removed since we're synchronous only
 
 const cfg = loadConfig();
-const app = Fastify({ logger: true });
+const app = Fastify({ 
+  logger: true,
+  connectionTimeout: 0, // Disable connection timeout
+  keepAliveTimeout: 0,  // Disable keep-alive timeout
+  requestTimeout: 0,    // Disable request timeout for long video processing
+});
 
 const CreateSchema = z.object({
   youtubeUrl: z.string().url(),

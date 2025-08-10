@@ -139,6 +139,8 @@ async function transcribeFileWithLocal(filePath: string, language: string | unde
   const response = await fetch(`${cfg.localAsrBaseUrl}/openai/v1/audio/transcriptions`, {
     method: 'POST',
     body: form as any,
+    // Set configurable timeout for transcription
+    signal: AbortSignal.timeout(cfg.localTimeoutMs),
   });
 
   if (!response.ok) {

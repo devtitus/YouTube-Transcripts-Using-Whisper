@@ -190,6 +190,8 @@ async function transcribeSingleFile(filePath: string, language: string | undefin
     method: 'POST',
     headers: { Authorization: `Bearer ${cfg.groqApiKey}` },
     body: form as any,
+    // Set configurable timeout for Groq transcription
+    signal: AbortSignal.timeout(cfg.groqTimeoutMs),
   });
   if (!res.ok) {
     const text = await res.text();
