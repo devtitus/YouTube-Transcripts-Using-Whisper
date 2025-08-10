@@ -1,10 +1,15 @@
+# Multi-container approach - more reliable but uses more resources
+# Use this if you have issues with the single container approach
+
 services:
-  transcripts-service:
-    build: .
-    container_name: transcripts-app
+  # Node.js API Service
+  nodejs-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.multi
+    container_name: transcripts-nodejs
     ports:
-      - "5685:5685"  # Node.js API
-      - "5686:5686"  # Python ASR service
+      - "5685:5685"
     environment:
       - NODE_ENV=production
       - PORT=5685
@@ -12,7 +17,7 @@ services:
       
       # Groq Cloud Configuration
       - GROQ_API_KEY=${GROQ_API_KEY}
-      - GROQ_WHISPER_MODEL=${GROQ_WHISPER_MODEL}
+      - GROQ_WHISPER_MODEL=${GROQ_WHISPER_MODEL:-whisper-large-v3-turbo}
       - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
       - GROQ_AUDIO_CODEC=${GROQ_AUDIO_CODEC:-aac}
       - GROQ_AUDIO_BITRATE_KBPS=${GROQ_AUDIO_BITRATE_KBPS:-32}
@@ -20,7 +25,7 @@ services:
       - GROQ_MAX_REQUEST_MB=${GROQ_MAX_REQUEST_MB:-15}
       
       # Local ASR Configuration
-      - LOCAL_ASR_BASE_URL=http://localhost:5686
+      - LOCAL_ASR_BASE_URL=http://python-asr:5686
       - LOCAL_ASR_MODEL=${LOCAL_ASR_MODEL:-base.en}
       - DEFAULT_MODEL_TYPE=${DEFAULT_MODEL_TYPE:-auto}
       
@@ -29,26 +34,45 @@ services:
       
     volumes:
       - audio_data:/app/audio_file
-      - models_data:/app/models
-      # Persist Python models to avoid re-downloading
-      - huggingface_cache:/root/.cache/huggingface
     depends_on:
       - redis
+      - python-asr
     restart: unless-stopped
     networks:
       - transcripts-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz", "&&", "curl", "-f", "http://localhost:5686/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Python ASR Service
+  python-asr:
+    build:
+      context: .
+      dockerfile: Dockerfile.python
+    container_name: transcripts-python
+    ports:
+      - "5686:5686"  # Expose for debugging (optional)
+    volumes:
+      - models_data:/app/models
+      - huggingface_cache:/root/.cache/huggingface
+    restart: unless-stopped
+    networks:
+      - transcripts-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5686/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
+  # Redis Service
   redis:
     image: redis:7-alpine
     container_name: transcripts-redis
     ports:
-      - "6381:6379"  # Expose on different port to avoid conflicts
+      - "6381:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped

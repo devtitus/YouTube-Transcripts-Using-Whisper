@@ -1,0 +1,31 @@
+# Python ASR service Dockerfile
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY py_asr_service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy Python service code
+COPY py_asr_service/ .
+
+# Create models directory
+RUN mkdir -p models
+
+# Expose Python service port
+EXPOSE 5686
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:5686/healthz || exit 1
+
+# Start Python ASR service
+CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "5686"]

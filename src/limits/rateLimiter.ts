@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { redis, isRedisConnected } from "../utils/redis.js";
 
 const limitsFile = path.join(os.tmpdir(), "groq-limits.json");
 
@@ -18,23 +17,6 @@ const DEFAULT_LIMITS: LimitsState = {
 };
 
 async function readState(): Promise<LimitsState> {
-  if (isRedisConnected()) {
-    try {
-      const data = await redis.get('groq:limits');
-      if (data) {
-        const parsed = JSON.parse(data);
-        return {
-          minute: parsed.minute || { ...DEFAULT_LIMITS.minute },
-          hour: parsed.hour || { ...DEFAULT_LIMITS.hour },
-          day: parsed.day || { ...DEFAULT_LIMITS.day },
-        } as LimitsState;
-      }
-    } catch (error) {
-      console.error('Error reading from Redis:', error);
-    }
-  }
-  
-  // Fallback to filesystem
   try {
     if (!fs.existsSync(limitsFile)) return { ...DEFAULT_LIMITS };
     const raw = JSON.parse(fs.readFileSync(limitsFile, "utf-8"));
@@ -49,16 +31,6 @@ async function readState(): Promise<LimitsState> {
 }
 
 async function writeState(state: LimitsState): Promise<void> {
-  if (isRedisConnected()) {
-    try {
-      await redis.set('groq:limits', JSON.stringify(state));
-      return;
-    } catch (error) {
-      console.error('Error writing to Redis:', error);
-    }
-  }
-  
-  // Fallback to filesystem
   try {
     fs.writeFileSync(limitsFile, JSON.stringify(state, null, 2), "utf-8");
   } catch (error) {

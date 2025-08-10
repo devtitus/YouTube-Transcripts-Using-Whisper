@@ -1,14 +1,12 @@
-export type JobStatus = "queued" | "downloading" | "converting" | "transcribing" | "completed" | "failed";
-
 export interface CreateTranscriptRequest {
   youtubeUrl: string;
   options?: {
     language?: string;
-    model?: string; // e.g., ggml-base.en.bin
+    model?: string; // e.g., ggml-base.en.bin, whisper-large-v3-turbo, base.en
+    modelType?: "local" | "cloud" | "auto"; // routing preference
     temperature?: number;
     translateTo?: string; // optional future use
   };
-  sync?: boolean; // if true, wait until done (use for short videos)
 }
 
 export interface TranscriptSegmentWord {
@@ -37,25 +35,4 @@ export interface TranscriptJSON {
   segments: TranscriptSegment[];
 }
 
-export interface JobRecord {
-  id: string;
-  youtubeUrl: string;
-  status: JobStatus;
-  model: string | null;
-  language: string | null;
-  error: string | null;
-  createdAt: number; // epoch ms
-  updatedAt: number; // epoch ms
-}
-
-export interface ArtifactPaths {
-  jobId: string;
-  baseDir: string; // per-job dir
-  audioPath?: string; // original container file from yt-dlp
-  wavPath?: string;   // 16k mono wav
-  outPrefix: string;  // prefix for whisper outputs
-  jsonPath: string;   // normalized JSON path
-  srtPath: string;
-  vttPath: string;
-  txtPath: string;
-}
+// Removed JobRecord and ArtifactPaths - no longer needed for synchronous operation
