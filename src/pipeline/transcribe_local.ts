@@ -3,6 +3,7 @@ import path from "node:path";
 import { fetch, FormData, File } from "undici";
 import type { TranscriptJSON, TranscriptSegment } from "../types.js";
 import { loadConfig } from "../config.js";
+import { runCommand } from "../utils/process.js";
 
 const cfg = loadConfig();
 
@@ -29,27 +30,91 @@ export async function transcribeWithLocal(opts: LocalTranscribeOptions) {
   // Use the provided model or fall back to config default
   const modelToUse = opts.model || cfg.localAsrModel;
 
-  // Transcribe using local Python service
-  const result = await transcribeFileWithLocal(opts.wavPath, opts.language, modelToUse);
-  
-  // Normalize the response to our standard format
-  const normalized = normalizeLocalAsrResponse(result, opts.jobId, opts.youtubeUrl, modelToUse);
+  // Check if we need to chunk the audio file
+  const needsChunking = await shouldChunkAudio(opts.wavPath);
+  let result;
+
+  if (needsChunking) {
+    // Split into chunks and process each chunk
+    const chunkPaths = await splitAudioIntoChunks(opts.wavPath, cfg.localChunkSeconds, opts.baseDir);
+    
+    // Process each chunk and merge results
+    const merged: TranscriptJSON = {
+      id: opts.jobId,
+      youtubeUrl: opts.youtubeUrl,
+      language: undefined,
+      durationMs: 0,
+      model: modelToUse,
+      text: "",
+      segments: [],
+    };
+
+    let cumulativeOffsetMs = 0;
+    let detectedLanguage: string | undefined = opts.language;
+
+    for (let i = 0; i < chunkPaths.length; i++) {
+      const chunkPath = chunkPaths[i];
+      
+      // Transcribe this chunk
+      const chunkResult = await transcribeFileWithLocal(chunkPath, detectedLanguage, modelToUse);
+      const normalizedChunk = normalizeLocalAsrResponse(chunkResult, `${opts.jobId}_chunk_${i}`, opts.youtubeUrl, modelToUse);
+      
+      // Set detected language from first chunk
+      if (!detectedLanguage && normalizedChunk.language) {
+        detectedLanguage = normalizedChunk.language;
+        merged.language = detectedLanguage;
+      }
+
+      // Offset timestamps and merge segments with overlap handling
+      const overlapWindowMs = 2000; // tolerate 2s overlap
+      for (const seg of normalizedChunk.segments) {
+        const adjusted: TranscriptSegment = {
+          idx: merged.segments.length,
+          startMs: seg.startMs + cumulativeOffsetMs,
+          endMs: seg.endMs + cumulativeOffsetMs,
+          text: seg.text,
+        };
+        
+        const last = merged.segments[merged.segments.length - 1];
+        const isOverlapping = last && adjusted.startMs < (last.endMs - Math.min(500, overlapWindowMs / 2));
+        const isDuplicateText = last && normalizeText(last.text) === normalizeText(adjusted.text);
+        
+        if (isOverlapping && isDuplicateText) {
+          continue; // Skip duplicate segment
+        }
+        
+        merged.segments.push(adjusted);
+      }
+      
+      // Update cumulative offset based on last segment end
+      cumulativeOffsetMs = merged.segments.length ? merged.segments[merged.segments.length - 1].endMs : cumulativeOffsetMs;
+    }
+
+    merged.text = merged.segments.map(s => s.text).join(" ").trim();
+    merged.durationMs = merged.segments.length ? merged.segments[merged.segments.length - 1].endMs : merged.durationMs;
+    
+    result = merged;
+  } else {
+    // Process entire file as single chunk
+    const singleResult = await transcribeFileWithLocal(opts.wavPath, opts.language, modelToUse);
+    result = normalizeLocalAsrResponse(singleResult, opts.jobId, opts.youtubeUrl, modelToUse);
+  }
 
   // Save outputs in the same format as other transcription methods
   const outPrefix = path.join(opts.baseDir, `whisper_${opts.jobId}`);
   const jsonPath = path.join(opts.baseDir, `transcript_${opts.jobId}.json`);
   
   // Write JSON transcript
-  fs.writeFileSync(jsonPath, JSON.stringify(normalized, null, 2), "utf-8");
+  fs.writeFileSync(jsonPath, JSON.stringify(result, null, 2), "utf-8");
 
   // Generate SRT, VTT, and TXT files
   const srtPath = `${outPrefix}.srt`;
   const vttPath = `${outPrefix}.vtt`;
   const txtPath = `${outPrefix}.txt`;
   
-  fs.writeFileSync(srtPath, toSrt(normalized.segments), "utf-8");
-  fs.writeFileSync(vttPath, toVtt(normalized.segments), "utf-8");
-  fs.writeFileSync(txtPath, normalized.text + "\n", "utf-8");
+  fs.writeFileSync(srtPath, toSrt(result.segments), "utf-8");
+  fs.writeFileSync(vttPath, toVtt(result.segments), "utf-8");
+  fs.writeFileSync(txtPath, result.text + "\n", "utf-8");
 
   return { outPrefix, jsonPath, srtPath, vttPath, txtPath };
 }
@@ -149,3 +214,40 @@ function fmtVttTime(ms: number): string {
 
 function pad2(n: number) { return n.toString().padStart(2, "0"); }
 function pad3(n: number) { return n.toString().padStart(3, "0"); }
+
+async function shouldChunkAudio(filePath: string): Promise<boolean> {
+  try {
+    const stats = fs.statSync(filePath);
+    const fileSizeMb = stats.size / (1024 * 1024);
+    return fileSizeMb > cfg.localMaxFileMb;
+  } catch (error) {
+    // If we can't determine file size, assume chunking is needed for safety
+    return true;
+  }
+}
+
+async function splitAudioIntoChunks(inputPath: string, chunkSeconds: number, baseDir: string): Promise<string[]> {
+  // Use WAV format for local processing to maintain quality
+  const outPattern = path.join(baseDir, `local_chunk_%03d.wav`);
+  const args = [
+    '-y',
+    '-i', inputPath,
+    '-f', 'segment',
+    '-segment_time', String(chunkSeconds),
+    '-reset_timestamps', '1',
+    '-map', '0:a',
+    '-c', 'copy', // Keep as WAV
+    outPattern,
+  ];
+  await runCommand(cfg.ffmpegCmd, args);
+
+  // List generated files in numeric order
+  const files = fs.readdirSync(baseDir)
+    .filter(f => f.startsWith('local_chunk_') && f.endsWith('.wav'))
+    .sort();
+  return files.map(f => path.join(baseDir, f));
+}
+
+function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[\p{P}\p{S}]+/gu, " ").replace(/\s+/g, " ").trim();
+}

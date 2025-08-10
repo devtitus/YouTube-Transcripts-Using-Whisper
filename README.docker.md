@@ -1,203 +1,140 @@
 # Docker Deployment Guide
 
-This guide covers deploying the Transcripts Service using Docker with both local Python ASR and cloud Groq services.
+This guide provides detailed instructions for deploying the YouTube Transcription Service using a simple and efficient single-container setup with Docker.
 
-## 🚀 Deployment Options
+## 🚀 Deployment Overview
 
-Choose one of these approaches based on your needs:
+The service is designed to be easy to run using Docker Compose. The setup uses a single container that intelligently runs both the main Node.js API and the Python transcription service, making it resource-efficient and simple to manage.
 
-### **Option 1: Single Container (Resource Efficient)**
+--- 
+
+## 🏁 Quick Start
+
+Follow these steps to get the service running with Docker.
+
+### 1. **Set Up the Environment**
+
+First, create a `.env` file from the Docker environment template. This file will store your API key.
+
 ```bash
-# Use the main docker-compose.yml
-docker-compose up -d
-```
-
-### **Option 2: Multi-Container (More Reliable)**
-```bash
-# Use separate containers for each service
-docker-compose -f docker-compose.multi.yml up -d
-```
-
-## Quick Start
-
-### 1. **Setup Environment**
-```bash
-# Copy the Docker environment template
+# Copy the template to a new .env file
 cp .env.docker .env
-
-# Edit .env and add your Groq API key
-nano .env
 ```
+
+Next, open the `.env` file in a text editor and add your Groq API key.
+
+```env
+# .env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+> **Note:** If you leave `GROQ_API_KEY` blank, the service will automatically run in **local-only mode**, using the private, on-device transcription engine.
 
 ### 2. **Build the Application**
+
+Before starting the Docker container, you need to build the TypeScript application. This compiles the code into JavaScript that can be run by Node.js.
+
 ```bash
-# Build the TypeScript application first
+# This command compiles the src/ directory into dist/
 npm run build
 ```
 
-### 3. **Start Services**
+### 3. **Start the Service**
 
-**Single Container Approach:**
+With Docker running, start the service using Docker Compose:
+
 ```bash
-docker-compose up -d
+# This command builds the image and starts the service in the background.
+docker-compose up --build -d
 ```
 
-**Multi-Container Approach (Recommended):**
+### 4. **Check the Logs**
+
+To see the logs and ensure everything is running correctly, use the `docker-compose logs` command.
+
 ```bash
-docker-compose -f docker-compose.multi.yml up -d
+docker-compose logs -f
 ```
 
-### 4. **View Logs**
-```bash
-# Single container
-docker-compose logs -f transcripts-service
+### 5. **Test the API**
 
-# Multi-container
-docker-compose -f docker-compose.multi.yml logs -f
+Once the service is running, you can test the API. The service will be available at `http://localhost:5685`.
+
+```bash
+# Test the local model
+curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&model_type=local&sync=true"
+
+# Test the cloud model (if you added a Groq API key)
+curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&model_type=cloud&sync=true"
 ```
 
-### 3. **Test the API**
-```bash
-# Test local model
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=xxx&model_type=local&model=base.en&sync=true"
+--- 
 
-# Test cloud model
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=xxx&model_type=cloud&model=whisper-large-v3-turbo&sync=true"
-```
+## 🏗️ Architecture Overview
 
-## Architecture
+The Docker setup consists of two main components running inside a single container:
 
-The Docker setup includes:
+- **Node.js API (Port `5685`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service.
+- **Python ASR Service (Port `5686`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions.
+- **Redis (Port `6381`)**: A separate container that is used for rate limiting to ensure you don’t exceed the Groq API quotas.
 
-- **Node.js API** (Port 5685) - Main API with routing logic
-- **Python ASR Service** (Port 5686) - Local model inference using faster-whisper
-- **Redis** (Port 6381) - Job queue and rate limiting
-- **Automatic Cleanup** - Temporary files are automatically cleaned up
+An entrypoint script (`docker-entrypoint.sh`) manages starting both the Python and Node.js services in the correct order.
 
-## Services
+## 📦 Volumes
 
-### **transcripts-service**
-- Runs both Node.js API and Python ASR service in one container
-- Auto-starts Python service, then Node.js API
-- Health checks for both services
-- Automatic restart on failure
+Docker volumes are used to persist data and cache models, which is crucial for efficiency.
 
-### **redis**
-- Memory-optimized Redis configuration
-- Data persistence enabled
-- Health check monitoring
+- `audio_data`: A temporary storage location for audio files during processing.
+- `models_data`: Stores the downloaded `faster-whisper` models so they don't need to be re-downloaded every time the container starts.
+- `huggingface_cache`: A cache for models downloaded from Hugging Face.
+- `redis_data`: Persists Redis data, so rate-limiting information is not lost on restart.
 
-## Environment Variables
+To clear all cached data, including models, you can run `docker-compose down -v`.
+
+## ⚙️ Environment Variables
+
+You can customize the service's behavior by setting environment variables in your `.env` file.
 
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `GROQ_API_KEY` | - | **Required** for cloud models |
-| `DEFAULT_MODEL_TYPE` | `auto` | `local`, `cloud`, or `auto` |
-| `LOCAL_ASR_MODEL` | `base.en` | Default local model |
-| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | Default cloud model |
+| :--- | :--- | :--- |
+| `GROQ_API_KEY` | `(none)` | **Required for cloud mode.** Your API key from Groq. |
+| `DEFAULT_MODEL_TYPE` | `auto` | The default transcription mode: `local`, `cloud`, or `auto`. |
+| `LOCAL_ASR_MODEL` | `base.en` | The default model to use for the local service. |
+| `LOCAL_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for local service. |
+| `LOCAL_MAX_FILE_MB` | `100` | File size threshold in MB for triggering chunking (local service). |
+| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service. |
+| `GROQ_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for cloud service. |
+| `GROQ_MAX_REQUEST_MB` | `15` | File size threshold in MB for chunking (cloud service). |
 
-## Volume Mounts
+## 🛠️ Useful Docker Commands
 
-- `audio_data:/app/audio_file` - Temporary audio processing
-- `models_data:/app/models` - Model storage
-- `huggingface_cache:/root/.cache/huggingface` - Model cache (persistent)
-- `redis_data:/data` - Redis persistence
-
-## Commands
+Here are some common commands for managing your Docker deployment:
 
 ```bash
-# Start services
+# Start services in the background
 docker-compose up -d
 
-# View logs
+# View real-time logs from all services
 docker-compose logs -f
 
-# Stop services
+# Stop all running services
 docker-compose down
 
-# Rebuild and restart
+# Rebuild the image and restart the services
 docker-compose up --build -d
 
-# Clean up volumes (removes cached models)
+# Stop services and remove all associated volumes (clears caches)
 docker-compose down -v
 
-# Check service health
+# Check the status and health of your running containers
 docker-compose ps
 ```
 
-## API Endpoints
+## 🩺 Health Checks
 
-- `GET http://localhost:5685/healthz` - Health check
-- `POST http://localhost:5685/v1/transcripts` - Create transcription
-- `GET http://localhost:5685/v1/transcripts/:id` - Get transcription status
-- `GET http://localhost:5685/v1/transcripts/:id.{json|srt|vtt|txt}` - Download results
+The service has health check endpoints to ensure it is running correctly.
 
-## Monitoring
+- **Node.js API:** `curl http://localhost:5685/healthz`
+- **Python ASR Service:** `curl http://localhost:5686/healthz`
 
-### **Health Checks**
-```bash
-# Check all services
-curl http://localhost:5685/healthz  # Node.js API
-curl http://localhost:5686/healthz  # Python ASR
-```
-
-### **Container Status**
-```bash
-# View container status
-docker-compose ps
-
-# View detailed logs
-docker-compose logs transcripts-service
-docker-compose logs redis
-```
-
-## Scaling
-
-To handle higher loads:
-
-```yaml
-# In docker-compose.yml
-services:
-  transcripts-service:
-    deploy:
-      replicas: 3
-    # ... rest of config
-```
-
-## Troubleshooting
-
-### **Port Conflicts**
-```bash
-# Check what's using ports
-netstat -tulpn | grep :5685
-netstat -tulpn | grep :5686
-
-# Use different ports
-# Edit docker-compose.yml ports section
-```
-
-### **Model Download Issues**
-```bash
-# Check model cache volume
-docker volume inspect transcripts_project_huggingface_cache
-
-# Clear cache if needed
-docker volume rm transcripts_project_huggingface_cache
-```
-
-### **Memory Issues**
-```bash
-# Monitor container memory
-docker stats transcripts-app
-
-# Increase Redis memory limit in docker-compose.yml
-command: redis-server --appendonly yes --maxmemory 512mb
-```
-
-## Production Considerations
-
-1. **Set up proper monitoring** (health checks, logs)
-2. **Configure resource limits** in docker-compose.yml
-3. **Use external Redis** for production deployments
-4. **Set up log aggregation** (ELK stack, etc.)
-5. **Configure backup** for Redis data volume
+Docker Compose automatically uses these health checks to monitor the container status.

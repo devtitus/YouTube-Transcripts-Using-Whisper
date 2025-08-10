@@ -22,6 +22,8 @@ services:
       # Local ASR Configuration
       - LOCAL_ASR_BASE_URL=http://localhost:5686
       - LOCAL_ASR_MODEL=${LOCAL_ASR_MODEL:-base.en}
+      - LOCAL_CHUNK_SECONDS=${LOCAL_CHUNK_SECONDS:-600}
+      - LOCAL_MAX_FILE_MB=${LOCAL_MAX_FILE_MB:-100}
       - DEFAULT_MODEL_TYPE=${DEFAULT_MODEL_TYPE:-auto}
       
       # Service Configuration

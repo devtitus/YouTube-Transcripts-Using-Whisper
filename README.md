@@ -1,133 +1,120 @@
-# YouTube Transcripts Service
+# YouTube Transcription Service
 
-A Node.js service for transcribing YouTube videos using Groq API with rate limiting and Redis support.
+This project is a powerful and flexible service that automatically generates transcripts for any YouTube video. You provide a YouTube URL, and the service returns the video's text with timestamps. It's designed to be easy to use, with options for both fast cloud-based transcription and a private, local-only mode.
 
-## Features
+## ✨ Features
 
-- YouTube video transcription using Groq's Whisper models
-- Rate limiting with Redis backend
-- Query parameter and JSON body support
-- Docker Compose deployment
-- Multiple output formats (JSON, SRT, VTT, TXT)
-- No persistent storage (memory-based job tracking)
+- **Dual Transcription Modes:**
+  - **☁️ Cloud-Powered (Groq):** Uses the [Groq API](https://groq.com/) for incredibly fast and accurate transcription with OpenAI's Whisper models.
+  - **💻 Local-Only:** Runs a private, on-device transcription service using `faster-whisper` for offline use and data privacy.
+- **Automatic Fallback:** If one transcription service fails, it can automatically switch to the other, ensuring high availability.
+- **Smart Chunking:** Automatically splits large audio files into smaller chunks to meet API limits and improve reliability for both local and cloud processing.
+- **Easy Deployment:** Get started in minutes with Docker Compose.
+- **Multiple Output Formats:** Get your transcripts in `JSON`, `SRT`, `VTT`, or plain `TXT`.
+- **Smart Rate Limiting:** Automatically manages API usage to prevent hitting Groq's rate limits.
+- **Flexible API:** Submit transcription jobs via query parameters or a JSON body.
 
-## Quick Start with Docker
+## 🚀 Quick Start (Docker)
 
-1. **Clone and setup environment:**
+The easiest way to get the service running is with Docker.
 
-   ```bash
-   git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
-   cd transcripts_project
-   cp .env.docker .env
-   # Edit .env and add your GROQ_API_KEY
-   ```
+### 1. **Set Up the Environment**
 
-2. **Start with Docker Compose:**
-
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Test the API:**
-   ```bash
-   curl 'http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=jvDJ5jTamHE&language=en&model=distil-whisper-large-v3-en&sync=true'
-   ```
-
-## API Usage
-
-### POST /v1/transcripts
-
-**Query Parameters:**
-
-- `url` or `youtubeUrl`: YouTube video URL (required)
-- `language`: Language code (e.g., "en") (optional)
-- `model`: Whisper model (optional)
-  - `distil-whisper-large-v3-en`
-  - `whisper-large-v3-turbo`
-  - `whisper-large-v3`
-- `sync`: Set to "true" for synchronous processing (optional)
-
-**JSON Body (alternative):**
-
-```json
-{
-  "youtubeUrl": "https://www.youtube.com/watch?v=jvDJ5jTamHE",
-  "options": {
-    "language": "en",
-    "model": "distil-whisper-large-v3-en"
-  },
-  "sync": true
-}
-```
-
-### Examples
-
-**Query Parameters:**
+First, clone the project and create your environment file from the example:
 
 ```bash
-curl 'http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=jvDJ5jTamHE&language=en&model=distil-whisper-large-v3-en&sync=true'
+git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
+cd transcripts_project
+cp .env.docker .env
 ```
 
-**JSON Body:**
+Next, open the `.env` file in a text editor and add your Groq API key. If you don't have one, you can get it from the [Groq Console](https://console.groq.com/keys).
+
+```env
+# .env
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+> **Note:** If you leave the `GROQ_API_KEY` blank, the service will run in **local-only** mode.
+
+### 2. **Build and Run the Service**
+
+With Docker running, start the services using Docker Compose:
 
 ```bash
-curl -X POST 'http://localhost:5685/v1/transcripts' \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "youtubeUrl": "https://www.youtube.com/watch?v=jvDJ5jTamHE",
-    "options": {"language": "en", "model": "distil-whisper-large-v3-en"},
-    "sync": true
-  }'
+# This command builds the images and starts the services in the background.
+docker-compose up --build -d
 ```
 
-## Rate Limiting
+The service is now running! The main API is available at `http://localhost:5685`.
 
-The service implements Groq's rate limits:
+### 3. **Test the API**
 
-- **20 requests/minute**: Waits until next minute
-- **7,200 audio seconds/hour**: Waits until next hour
-- **2,000 requests/day**: Returns 429 error
-- **28,800 audio seconds/day**: Returns 429 error
-
-Rate limiting data is stored in Redis for persistence across restarts.
-
-## Development
-
-**Local development:**
+You can test the service by sending a `curl` request. Here’s how to transcribe a video and get the result directly (synchronously):
 
 ```bash
-npm install
-npm run dev
+# Example: Transcribe a video using the default "auto" mode
+curl "http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ&sync=true"
 ```
 
-**Build:**
+You should see a JSON response containing the full transcript.
 
-```bash
-npm run build
-npm start
-```
+## ⚙️ API Usage
 
-## Environment Variables
+You can create a new transcription job by sending a `POST` request to the `/v1/transcripts` endpoint.
 
-- `GROQ_API_KEY`: Your Groq API key (required)
-- `GROQ_WHISPER_MODEL`: Default model (default: distil-whisper-large-v3-en)
-- `GROQ_BASE_URL`: Groq API base URL (default: https://api.groq.com/openai/v1)
-- `REDIS_URL`: Redis connection URL (default: redis://localhost:6379)
-- `PORT`: Server port (default: 8080)
+### Request Endpoint
 
-## Docker Compose Services
+`POST /v1/transcripts`
 
-- **app**: Main transcription service
-- **redis**: Redis server for rate limiting and caching
+### How to Provide Input
 
-## Health Check
+You can provide the YouTube URL and options in two ways:
 
-```bash
-curl http://localhost:8080/healthz
-```
+1.  **Query Parameters (for simple requests):**
 
-## Notes
+    ```bash
+    curl "http://localhost:5685/v1/transcripts?url=<YOUTUBE_URL>&model_type=cloud&model=whisper-large-v3"
+    ```
 
-- Transcript data is not persisted - use `sync=true` for immediate results
-- Audio files are temporarily stored during processing and cleaned up automatically
-- The service falls back to filesystem-based rate limiting if Redis is unavailable
+2.  **JSON Body (for more control):**
+
+    ```bash
+    curl -X POST http://localhost:5685/v1/transcripts \
+      -H "Content-Type: application/json" \
+      -d '{
+        "youtubeUrl": "<YOUTUBE_URL>",
+        "options": {
+          "model_type": "local",
+          "model": "base.en"
+        }
+      }'
+    ```
+
+### Parameters
+
+| Parameter | Location | Description | Example |
+| : | : | : | : |
+| `youtubeUrl` or `url` | Body / Query | **Required.** The URL of the YouTube video. | `https://youtube.com/watch?v=...` |
+| `model_type` | Body / Query | `cloud`, `local`, or `auto` (default). Chooses the transcription service. | `cloud` |
+| `model` | Body / Query | The specific model to use. See below for options. | `whisper-large-v3` |
+| `language` | Body / Query | A hint for the audio language (e.g., "en", "es"). | `en` |
+
+### Available Models
+
+- **Cloud (Groq):** `whisper-large-v3-turbo` (default), `whisper-large-v3`, `distil-whisper-large-v3-en`
+- **Local (`faster-whisper`):** `base.en` (default), `small.en`, `tiny.en`, `large-v3`
+
+## 🔧 Local Development (Without Docker)
+
+If you prefer to run the service without Docker, see the [**Local Setup Guide**](./SETUP_GUIDE.md).
+
+## 🐳 Docker Deployment
+
+For more detailed information on Docker deployment, including multi-container setups and troubleshooting, see the [**Docker Guide**](./README.docker.md).
+
+## 📄 Project Documentation
+
+- **[EXPLANATION.md](./EXPLANATION.md):** A detailed look at how the project works internally.
+- **[WORKFLOW.md](./WORKFLOW.md):** A diagram and explanation of the data flow.
+- **[SETUP_GUIDE.md](./SETUP_GUIDE.md):** Instructions for setting up a local development environment.

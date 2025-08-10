@@ -41,4 +41,4 @@ wait_for_service "Python ASR service" "http://localhost:5686/healthz"
 # Start Node.js service
 echo "🟢 Starting Node.js API service..."
 cd /app
-exec npm run start:node-only
+exec npm run start

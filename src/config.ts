@@ -19,6 +19,8 @@ export interface ServiceConfig {
   // Local ASR service configuration
   localAsrBaseUrl: string; // e.g., http://localhost:5686
   localAsrModel: string; // default model for local service
+  localChunkSeconds: number; // e.g., 600 (10 minutes) for local service
+  localMaxFileMb: number; // when larger than this, chunk for local service
   defaultModelType: "local" | "cloud" | "auto"; // default routing
 }
 
@@ -49,11 +51,13 @@ export function loadConfig(): ServiceConfig {
   // Local ASR service configuration
   const localAsrBaseUrl = process.env.LOCAL_ASR_BASE_URL || "http://localhost:5686";
   const localAsrModel = process.env.LOCAL_ASR_MODEL || "base.en";
+  const localChunkSeconds = Math.max(120, parseInt(process.env.LOCAL_CHUNK_SECONDS || "600", 10) || 600);
+  const localMaxFileMb = Math.max(5, parseInt(process.env.LOCAL_MAX_FILE_MB || "100", 10) || 100);
   const defaultModelTypeEnv = (process.env.DEFAULT_MODEL_TYPE || "auto").toLowerCase();
   const defaultModelType = (["local", "cloud", "auto"].includes(defaultModelTypeEnv) ? defaultModelTypeEnv : "auto") as "local" | "cloud" | "auto";
 
   // Only create directories that are actually needed (audio files)
   ensureDir(audioDir);
 
-  return { audioDir, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb, localAsrBaseUrl, localAsrModel, defaultModelType };
+  return { audioDir, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb, localAsrBaseUrl, localAsrModel, localChunkSeconds, localMaxFileMb, defaultModelType };
 }

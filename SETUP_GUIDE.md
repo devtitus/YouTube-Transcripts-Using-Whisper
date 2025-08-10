@@ -1,132 +1,120 @@
-# Setup Guide
+# Local Development Setup Guide
 
-This guide will walk you through setting up and running the transcription service. You can choose to run the project using Docker (recommended for ease of use) or by setting up a local environment.
+This guide will walk you through setting up and running the YouTube Transcription Service on your local machine **without using Docker**. This method is ideal if you want to have more direct control over the environment or contribute to the code.
 
-## Method 1: Running with Docker (Recommended)
+## ✅ Prerequisites
 
-Using Docker is the easiest way to get the service running, as it automatically handles all dependencies and configurations.
+Before you begin, make sure you have the following software installed on your system:
 
-### Prerequisites
+- **[Node.js](https://nodejs.org/)**: Version 18 or later.
+- **[npm](https://www.npmjs.com/)**: Included with Node.js.
+- **[Python](https://www.python.org/downloads/)**: Version 3.8 or later.
+- **[ffmpeg](https://ffmpeg.org/download.html)**: A tool for audio conversion. It must be installed and accessible in your system's PATH.
 
-- [Docker](https://docs.docker.com/get-docker/) installed on your system.
-- [Docker Compose](https://docs.docker.com/compose/install/) (usually included with Docker Desktop).
+> **Tip:** To check if `ffmpeg` is installed correctly, open a terminal and run `ffmpeg -version`. If it shows the version number, you're good to go.
 
-### Steps
+---
 
-1.  **Clone the Repository:**
+## ⚙️ Setup Instructions
 
-    ```bash
-    git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
-    cd transcripts-project
-    ```
+### 1. **Clone the Repository**
 
-2.  **Create an Environment File:**
+First, clone the project to your local machine:
 
-    Create a file named `.env` in the root of the project and add the following content. This is where you will put your Groq API key.
+```bash
+git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
+cd transcripts-project
+```
 
-    ```
-    # .env file
-    GROQ_API_KEY=your_groq_api_key_here
-    GROQ_WHISPER_MODEL=  # pick one: whisper-large-v3-turbo (default), whisper-large-v3, or distil-whisper-large-v3-en
-    GROQ_BASE_URL=https://api.groq.com/openai/v1/
-    ```
+### 2. **Install Node.js Dependencies**
 
-    - **To use the Groq API:** Get an API key from [Groq](https://console.groq.com/keys) and paste it into the `.env` file.
-    - **To use the local model:** You can leave the `GROQ_API_KEY` blank. You will need to download a `whisper.cpp` model and place it in the `models` directory (see local setup for more details).
+Install all the required Node.js packages using npm:
 
-3.  **Build and Run with Docker Compose:**
+```bash
+npm install
+```
 
-    Open a terminal in the project's root directory and run the following command:
+### 3. **Set Up the Python Environment**
 
-    ```bash
-    docker-compose up --build
-    ```
+The project uses a Python script to automatically set up a virtual environment for the local transcription service. This keeps its dependencies isolated from your system.
 
-    This command will:
+Run the following command from the project root:
 
-    - Build the Docker image for the application.
-    - Start the transcription service and a Redis container.
-    - The service will be available at `http://localhost:5685`.
+```bash
+node scripts/setup-python.js
+```
 
-4.  **Stopping the Service:**
+This script will:
+- Create a `venv` folder inside `py_asr_service`.
+- Install all the necessary Python packages from `requirements.txt`.
 
-    To stop the services, press `Ctrl + C` in the terminal where `docker-compose` is running, or run the following command from another terminal:
+### 4. **Configure Environment Variables**
 
-    ```bash
-    docker-compose down
-    ```
+Create a `.env` file in the project root by copying the example file:
 
-## Method 2: Local Development Setup
+```bash
+cp .env.example .env
+```
 
-If you prefer to run the service without Docker, you can set up a local development environment.
+Now, open the `.env` file and configure it:
 
-### Prerequisites
+```env
+# .env file
 
-- [Node.js](https://nodejs.org/) (v18 or later)
-- [npm](https://www.npmjs.com/) (included with Node.js)
-- [ffmpeg](https://ffmpeg.org/download.html) installed and available in your system's PATH.
-- (Optional) A C++ compiler to build `whisper.cpp` for local transcription.
+# To use the fast cloud-based transcription:
+# Get an API key from https://console.groq.com/keys
+GROQ_API_KEY=your_groq_api_key_here
 
-### Steps
+# To use the private, local-only transcription:
+# Leave GROQ_API_KEY blank.
 
-1.  **Clone the Repository:**
+# You can also set the default model type ("auto", "cloud", or "local")
+DEFAULT_MODEL_TYPE=auto
 
-    ```bash
-    git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
-    cd transcripts-project
-    ```
+# Server port
+PORT=5685
+```
 
-2.  **Install Dependencies:**
+- **For Cloud Mode:** Fill in your `GROQ_API_KEY`.
+- **For Local-Only Mode:** Leave `GROQ_API_KEY` empty.
 
-    ```bash
-    npm install
-    ```
+### 5. **Build the TypeScript Code**
 
-3.  **Configure Environment Variables:**
+Before running the server, you need to compile the TypeScript code to JavaScript:
 
-    Create a `.env` file in the project root:
+```bash
+npm run build
+```
 
-    ```
-    # .env file
+---
 
-    # For Groq API transcription (recommended)
-    GROQ_API_KEY=your_groq_api_key_here
-    GROQ_WHISPER_MODEL= # pick one: whisper-large-v3-turbo (default), whisper-large-v3, or distil-whisper-large-v3-en
-    GROQ_BASE_URL=https://api.groq.com/openai/v1/
-    PORT=5685
 
-    # For local transcription with whisper.cpp
-    # WHISPER_CMD=path/to/your/whisper.cpp/main
-    # WHISPER_MODEL=ggml-base.en.bin
-    ```
+## ▶️ Running the Service
 
-    - **For Groq:** Fill in your `GROQ_API_KEY`.
-    - **For Local `whisper.cpp`:**
-      1.  Download or build `whisper.cpp` from the [official repository](https://github.com/ggerganov/whisper.cpp).
-      2.  Download a model (e.g., `ggml-base.en.bin`) from the `whisper.cpp` repository.
-      3.  Create a `models` directory in the project root and place the model file inside it.
-      4.  Set the `WHISPER_CMD` variable in your `.env` file to the path of the `main` executable of `whisper.cpp`.
+Now you are ready to start the service. The project uses `concurrently` to run both the Node.js API and the Python transcription server at the same time.
 
-4.  **Run the Service:**
+```bash
+npm run dev
+```
 
-    ```bash
-    npm run dev
-    ```
+This command will:
+1.  Start the **Python FastAPI server** for local transcriptions on port `5686`.
+2.  Start the **Node.js Fastify server** for the main API on port `5685`.
 
-    This will start the server in development mode with hot-reloading. The service will be available at `http://localhost:5685` (or the port specified in your `.env` file).
+The service is now running in development mode with hot-reloading, so any changes you make to the code will automatically restart the server.
 
-## How to Use the Service
+## 🧪 How to Use the Service
 
 Once the service is running, you can send `POST` requests to the `/v1/transcripts` endpoint.
 
 ### Example Request (using curl)
 
+Here is an example of how to transcribe a video and get the result immediately:
+
 ```bash
 curl -X POST -H "Content-Type: application/json" \
--d '{"youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "sync": true}' \
+-d '{"youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
 http://localhost:5685/v1/transcripts
 ```
 
-- Replace `5685` with `8080` if you are running a local development server.
-- Set `sync` to `true` to wait for the transcript to be generated and returned in the response. This is recommended for shorter videos.
-- Set `sync` to `false` (or omit it) for an asynchronous job that will run in the background. The response will contain a `jobId` that you can use to check the status later (though the current version of the service does not persist job results).
+This will use the `auto` mode, which will try the Groq API first (if a key is provided) and fall back to the local service if needed.
