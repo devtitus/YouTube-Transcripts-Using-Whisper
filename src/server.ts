@@ -74,17 +74,13 @@ async function processJob(job: JobRecord, opts: { language?: string; model?: str
       srtPath,
       vttPath,
       txtPath,
+      result: transcriptResult,
     });
 
-    // Clean up all temporary files
+    // Clean up large intermediates only; keep artifacts for downloads
     try {
       if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
       if (fs.existsSync(wavPath)) fs.unlinkSync(wavPath);
-      if (fs.existsSync(jsonPath)) fs.unlinkSync(jsonPath);
-      if (fs.existsSync(srtPath)) fs.unlinkSync(srtPath);
-      if (fs.existsSync(vttPath)) fs.unlinkSync(vttPath);
-      if (fs.existsSync(txtPath)) fs.unlinkSync(txtPath);
-      if (fs.existsSync(outBaseDir)) fs.rmSync(outBaseDir, { recursive: true });
     } catch {}
 
     updateJobModelLang(job.id, opts.model || cfg.whisperModel, opts.language || null);
@@ -153,17 +149,21 @@ app.post("/v1/transcripts", async (req, reply) => {
   };
   insertJob(job);
 
-  // Rate limiting (Groq only). Estimate duration prior to reserving.
+  // Estimate duration to decide sync vs async; apply rate limiting if Groq is used
+  const anticipatedSeconds = await fetchVideoDurationSeconds(body.youtubeUrl);
   if (cfg.groqApiKey) {
-    const seconds = await fetchVideoDurationSeconds(body.youtubeUrl);
-    const daily = await checkDailyExhaustion(seconds);
+    const daily = await checkDailyExhaustion(anticipatedSeconds);
     if (daily.requestsExhausted) {
       return reply.code(429).send({ id, status: "failed", error: "Daily request quota (2000) exhausted. Try tomorrow." });
     }
     if (daily.audioSecondsExhausted) {
       return reply.code(429).send({ id, status: "failed", error: "Daily audio seconds quota (28800s) exhausted. Try tomorrow." });
     }
-    await reserveForGroq(seconds || 0);
+  }
+
+  if (cfg.groqApiKey) {
+    // Reserve only if we actually start processing
+    await reserveForGroq(anticipatedSeconds || 0);
   }
 
   if (body.sync) {
@@ -185,16 +185,21 @@ app.get("/v1/transcripts/:id", async (req, reply) => {
   const { id } = req.params as { id: string };
   const job = getJob(id);
   if (!job) return reply.code(404).send({ error: "Not found" });
-  return reply.code(200).send({ 
-    id: job.id, 
-    status: job.status, 
-    error: job.error,
-    message: "Transcript data is not persisted. Use sync=true in POST request to get results immediately."
-  });
+  if (job.status === "completed") {
+    const art = getArtifacts(id);
+    return reply.code(200).send({ id: job.id, status: job.status, result: art?.result || null });
+  }
+  return reply.code(200).send({ id: job.id, status: job.status, error: job.error });
 });
 
 app.get("/v1/transcripts/:id.:fmt", async (req, reply) => {
-  return reply.code(404).send({ error: "File downloads not available. Transcript data is not persisted. Use sync=true in POST request to get results immediately." });
+  const { id, fmt } = req.params as { id: string; fmt: string };
+  const art = getArtifacts(id);
+  if (!art) return reply.code(404).send({ error: "Not found" });
+  const map: Record<string, string | undefined> = { json: art.jsonPath, srt: art.srtPath, vtt: art.vttPath, txt: art.txtPath };
+  const p = map[fmt];
+  if (!p || !fs.existsSync(p)) return reply.code(404).send({ error: "File not found" });
+  return reply.send(fs.createReadStream(p));
 });
 
 app.get("/healthz", async () => ({ ok: true }));

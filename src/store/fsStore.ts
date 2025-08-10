@@ -2,7 +2,7 @@ import type { JobRecord } from "../types.js";
 
 // In-memory storage - no persistence to disk
 const jobs = new Map<string, JobRecord>();
-const artifacts = new Map<string, { jobId: string; baseDir: string; audioPath?: string | null; wavPath?: string | null; outPrefix: string; jsonPath: string; srtPath: string; vttPath: string; txtPath: string; }>();
+const artifacts = new Map<string, { jobId: string; baseDir: string; audioPath?: string | null; wavPath?: string | null; outPrefix: string; jsonPath: string; srtPath: string; vttPath: string; txtPath: string; result?: any }>();
 
 export function insertJob(job: JobRecord) {
   jobs.set(job.id, { ...job });
@@ -30,10 +30,10 @@ export function getJob(id: string): JobRecord | null {
   return jobs.get(id) || null;
 }
 
-export function upsertArtifacts(rec: { jobId: string; baseDir: string; audioPath?: string | null; wavPath?: string | null; outPrefix: string; jsonPath: string; srtPath: string; vttPath: string; txtPath: string; }) {
+export function upsertArtifacts(rec: { jobId: string; baseDir: string; audioPath?: string | null; wavPath?: string | null; outPrefix: string; jsonPath: string; srtPath: string; vttPath: string; txtPath: string; result?: any }) {
   artifacts.set(rec.jobId, { ...rec });
 }
 
-export function getArtifacts(jobId: string): { jobId: string; baseDir: string; audioPath?: string | null; wavPath?: string | null; outPrefix: string; jsonPath: string; srtPath: string; vttPath: string; txtPath: string; } | null {
+export function getArtifacts(jobId: string): { jobId: string; baseDir: string; audioPath?: string | null; wavPath?: string | null; outPrefix: string; jsonPath: string; srtPath: string; vttPath: string; txtPath: string; result?: any } | null {
   return artifacts.get(jobId) || null;
 }

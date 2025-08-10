@@ -12,9 +12,15 @@ export interface ServiceConfig {
   ffmpegCmd: string;
   ytdlpCmd: string;
   port: number;
+  maxSyncSeconds: number; // requests with duration > this run async
   groqApiKey?: string;
   groqBaseUrl: string; // OpenAI-compatible route
   groqWhisperModel: string; // e.g., whisper-large-v3-turbo
+  // Groq upload tuning
+  groqAudioCodec: "aac" | "mp3";
+  groqAudioBitrateKbps: number; // e.g., 32
+  groqChunkSeconds: number; // e.g., 600 (10 minutes)
+  groqMaxRequestMb: number; // when larger than this, chunk
 }
 
 function ensureDir(dir: string) {
@@ -36,12 +42,18 @@ export function loadConfig(): ServiceConfig {
   // We use yt-dlp-exec directly; keep YTDLP_CMD only as a last-resort fallback
   const ytdlpCmd = process.env.YTDLP_CMD || "yt-dlp";
   const port = parseInt(process.env.PORT || "8080", 10);
+  const maxSyncSeconds = Math.max(60, parseInt(process.env.MAX_SYNC_SECONDS || "900", 10) || 900);
   const groqApiKey = process.env.GROQ_API_KEY || undefined;
   const groqBaseUrl = process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1";
   const groqWhisperModel = process.env.GROQ_WHISPER_MODEL || "whisper-large-v3-turbo";
+  const groqAudioCodecEnv = (process.env.GROQ_AUDIO_CODEC || "aac").toLowerCase();
+  const groqAudioCodec = (groqAudioCodecEnv === "mp3" ? "mp3" : "aac") as "aac" | "mp3";
+  const groqAudioBitrateKbps = Math.max(16, parseInt(process.env.GROQ_AUDIO_BITRATE_KBPS || "32", 10) || 32);
+  const groqChunkSeconds = Math.max(120, parseInt(process.env.GROQ_CHUNK_SECONDS || "600", 10) || 600);
+  const groqMaxRequestMb = Math.max(5, parseInt(process.env.GROQ_MAX_REQUEST_MB || "15", 10) || 15);
 
   // Only create directories that are actually needed (audio files and models)
   [audioDir, modelsDir].forEach(ensureDir);
 
-  return { dataDir, audioDir, modelsDir, whisperCmd, whisperModel, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel };
+  return { dataDir, audioDir, modelsDir, whisperCmd, whisperModel, ffmpegCmd, ytdlpCmd, port, maxSyncSeconds, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb };
 }
