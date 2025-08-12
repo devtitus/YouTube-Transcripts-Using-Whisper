@@ -16,95 +16,40 @@ COPY . .
 # Build the TypeScript project
 RUN npm run build
 
-# Python ASR service stage
-FROM python:3.10-slim AS python-builder
-
-# Set working directory for Python service
-WORKDIR /app/py_asr_service
-
-# Install system dependencies for faster-whisper
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy Python requirements
-COPY py_asr_service/requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy Python service code
-COPY py_asr_service/ .
-
 # Production stage
 FROM node:22-slim AS production
 
-# Install system dependencies
+# Install only necessary system dependencies
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
     ffmpeg \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libswresample-dev \
-    build-essential \
-    pkg-config \
     curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Create Python virtual environment for ASR service
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy Python requirements from python-builder
-COPY --from=python-builder /app/py_asr_service/requirements.txt /tmp/
-
-# Install Python dependencies for ASR service in virtual environment
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files for production dependencies
 COPY package*.json ./
 
 # Install only production dependencies
 RUN npm ci --only=production && npm cache clean --force
 
-# Copy built Node.js application
+# Copy built Node.js application from builder stage
 COPY --from=node-builder /app/dist ./dist
 
-# Copy Python ASR service
-COPY --from=python-builder /app/py_asr_service ./py_asr_service
-
-# Copy startup scripts and entrypoint
-COPY scripts/ ./scripts/
+# Copy the simplified entrypoint
 COPY docker-entrypoint.sh ./
-
-# Make entrypoint executable
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Create directories for audio files and models
-RUN mkdir -p /app/audio_file /app/models
+# Create directory for audio files
+RUN mkdir -p /app/audio_file
 
-# Expose ports for both services
-EXPOSE 5685 5686
+# Expose port for Node.js service
+EXPOSE 5685
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5685
-ENV GROQ_TIMEOUT_MS=1800000
-ENV LOCAL_ASR_BASE_URL=http://localhost:5686
-ENV LOCAL_ASR_MODEL=base.en
-ENV LOCAL_CHUNK_SECONDS=600
-ENV LOCAL_MAX_FILE_MB=100
-ENV LOCAL_TIMEOUT_MS=1800000
-ENV DEFAULT_MODEL_TYPE=auto
 
 # Use the entrypoint script
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

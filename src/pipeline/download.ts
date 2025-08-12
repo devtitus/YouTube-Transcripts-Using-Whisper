@@ -7,6 +7,24 @@ import ytdlp from "yt-dlp-exec";
 
 const cfg = loadConfig();
 
+function handleYtdlpError(err: any) {
+  const stderr = err?.stderr || "";
+  if (/private video/i.test(stderr)) {
+    throw new Error("This video is private and cannot be downloaded.");
+  }
+  if (/video unavailable/i.test(stderr)) {
+    throw new Error("This video is unavailable and cannot be downloaded.");
+  }
+  if (/age-restricted/i.test(stderr)) {
+    throw new Error("This video is age-restricted and requires login to download.");
+  }
+  if (/live event will begin/i.test(stderr)) {
+    throw new Error("This video is a future live stream and cannot be transcribed yet.");
+  }
+  // Generic fallback
+  throw new Error("Failed to download video audio. Please check the URL and try again.");
+}
+
 export async function downloadAudioForJob(jobId: string, youtubeUrl: string): Promise<{ audioPath: string; baseDir: string; }> {
   // Store raw audio in a shared local folder `audio_file/`, not in DB, and not per-job
   const baseDir = cfg.audioDir;
@@ -15,13 +33,17 @@ export async function downloadAudioForJob(jobId: string, youtubeUrl: string): Pr
   const safe = crypto.createHash("sha1").update(youtubeUrl).digest("hex").slice(0, 16);
   const outPath = path.join(baseDir, `audio_${safe}.%(ext)s`);
 
-  // Use the package runner (works on Windows without PATH). Build args explicitly to avoid bad flag names.
-  await ytdlp(youtubeUrl, {
-    format: "bestaudio/best",
-    output: outPath,
-    noProgress: true,
-    ffmpegLocation: cfg.ffmpegCmd,
-  });
+  try {
+    // Use the package runner (works on Windows without PATH). Build args explicitly to avoid bad flag names.
+    await ytdlp(youtubeUrl, {
+      format: "bestaudio/best",
+      output: outPath,
+      noProgress: true,
+      ffmpegLocation: cfg.ffmpegCmd,
+    });
+  } catch (err) {
+    handleYtdlpError(err);
+  }
 
   // Find the downloaded file (extension can vary: webm, m4a, etc.)
   const files = fs.readdirSync(baseDir).filter(f => f.startsWith(`audio_${safe}.`));
@@ -58,7 +80,8 @@ export async function fetchVideoDurationSeconds(youtubeUrl: string): Promise<num
     const dur = result?.duration;
     if (typeof dur === 'number' && isFinite(dur)) return dur;
     return 0;
-  } catch {
-    return 0;
+  } catch (err) {
+    handleYtdlpError(err);
+    return 0; // Should not be reached due to throw, but satisfies type checker
   }
 }

@@ -4,11 +4,9 @@ services:
     container_name: transcripts-app
     ports:
       - "5685:5685"  # Node.js API
-      - "5686:5686"  # Python ASR service
     environment:
       - NODE_ENV=production
       - PORT=5685
-      - REDIS_URL=redis://redis:6379
       
       # Groq Cloud Configuration
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -20,59 +18,20 @@ services:
       - GROQ_MAX_REQUEST_MB=${GROQ_MAX_REQUEST_MB:-15}
       - GROQ_TIMEOUT_MS=${GROQ_TIMEOUT_MS:-1800000}
       
-      # Local ASR Configuration
-      - LOCAL_ASR_BASE_URL=http://localhost:5686
-      - LOCAL_ASR_MODEL=${LOCAL_ASR_MODEL:-base.en}
-      - LOCAL_CHUNK_SECONDS=${LOCAL_CHUNK_SECONDS:-600}
-      - LOCAL_MAX_FILE_MB=${LOCAL_MAX_FILE_MB:-100}
-      - LOCAL_TIMEOUT_MS=${LOCAL_TIMEOUT_MS:-1800000}
-      - DEFAULT_MODEL_TYPE=${DEFAULT_MODEL_TYPE:-auto}
-      
-      # Service Configuration
-      - MAX_SYNC_SECONDS=${MAX_SYNC_SECONDS:-900}
-      
     volumes:
       - audio_data:/app/audio_file
-      - models_data:/app/models
-      # Persist Python models to avoid re-downloading
-      - huggingface_cache:/root/.cache/huggingface
-    depends_on:
-      - redis
     restart: unless-stopped
     networks:
       - transcripts-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz", "&&", "curl", "-f", "http://localhost:5686/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
-  redis:
-    image: redis:7-alpine
-    container_name: transcripts-redis
-    ports:
-      - "6381:6379"  # Expose on different port to avoid conflicts
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    networks:
-      - transcripts-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
 volumes:
   audio_data:
-    driver: local
-  models_data:
-    driver: local
-  redis_data:
-    driver: local
-  huggingface_cache:
     driver: local
 
 networks:
