@@ -7,15 +7,11 @@ import ytdlp from "yt-dlp-exec";
 
 const cfg = loadConfig();
 
-export async function downloadAudioForJob(jobId: string, youtubeUrl: string): Promise<{ audioPath: string; baseDir: string; }> {
-  // Store raw audio in a shared local folder `audio_file/`, not in DB, and not per-job
-  const baseDir = cfg.audioDir;
-  fs.mkdirSync(baseDir, { recursive: true });
+export async function downloadAudioForJob(jobId: string, youtubeUrl: string, outBaseDir: string): Promise<{ audioPath: string; }> {
+  // Download audio directly to the job-specific temporary directory
+  const outPath = path.join(outBaseDir, `audio.%(ext)s`);
 
-  const safe = crypto.createHash("sha1").update(youtubeUrl).digest("hex").slice(0, 16);
-  const outPath = path.join(baseDir, `audio_${safe}.%(ext)s`);
-
-  // Use the package runner (works on Windows without PATH). Build args explicitly to avoid bad flag names.
+  // Use the package runner. We specify a predictable output filename.
   await ytdlp(youtubeUrl, {
     format: "bestaudio/best",
     output: outPath,
@@ -24,16 +20,16 @@ export async function downloadAudioForJob(jobId: string, youtubeUrl: string): Pr
   });
 
   // Find the downloaded file (extension can vary: webm, m4a, etc.)
-  const files = fs.readdirSync(baseDir).filter(f => f.startsWith(`audio_${safe}.`));
+  const files = fs.readdirSync(outBaseDir).filter(f => f.startsWith(`audio.`));
   if (files.length === 0) {
     throw new Error("yt-dlp did not produce an audio file");
   }
-  const audioPath = path.join(baseDir, files[0]);
-  return { audioPath, baseDir };
+  const audioPath = path.join(outBaseDir, files[0]);
+  return { audioPath };
 }
 
 export async function convertToWav16kMono(inputPath: string): Promise<string> {
-  // Convert in-place within `audio_file/` directory
+  // Convert in-place within the job's temporary directory
   const dir = path.dirname(inputPath);
   const basename = path.parse(inputPath).name;
   const outWavPath = path.join(dir, `${basename}_16k_mono.wav`);
@@ -50,15 +46,15 @@ export async function convertToWav16kMono(inputPath: string): Promise<string> {
 }
 
 export async function fetchVideoDurationSeconds(youtubeUrl: string): Promise<number> {
-  try {
-    const result: any = await ytdlp(youtubeUrl, {
-      dumpSingleJson: true,
-      skipDownload: true,
-    });
-    const dur = result?.duration;
-    if (typeof dur === 'number' && isFinite(dur)) return dur;
-    return 0;
-  } catch {
-    return 0;
+  // This will now throw an error if the URL is invalid or video is unavailable
+  const result: any = await ytdlp(youtubeUrl, {
+    dumpSingleJson: true,
+    skipDownload: true,
+  });
+  const dur = result?.duration;
+  if (typeof dur === 'number' && isFinite(dur)) {
+    return dur;
   }
+  // If duration is missing from metadata, throw an error
+  throw new Error("Could not determine video duration from metadata.");
 }

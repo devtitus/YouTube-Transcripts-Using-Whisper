@@ -14,21 +14,7 @@ Follow these steps to get the service running with Docker.
 
 ### 1. **Set Up the Environment**
 
-First, create a `.env` file from the Docker environment template. This file will store your API key.
-
-```bash
-# Copy the template to a new .env file
-cp .env.docker .env
-```
-
-Next, open the `.env` file in a text editor and add your Groq API key.
-
-```env
-# .env
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-> **Note:** If you leave `GROQ_API_KEY` blank, the service will automatically run in **local-only mode**, using the private, on-device transcription engine.
+This service is ready to run out-of-the-box. No API keys or special environment setup is needed.
 
 ### 2. **Build the Application**
 
@@ -62,10 +48,7 @@ Once the service is running, you can test the API. The service will be available
 
 ```bash
 # Test the local model
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&model_type=local&sync=true"
-
-# Test the cloud model (if you added a Groq API key)
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&model_type=cloud&sync=true"
+curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=..."
 ```
 
 --- 
@@ -76,7 +59,6 @@ The Docker setup consists of two main components running inside a single contain
 
 - **Node.js API (Port `5685`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service.
 - **Python ASR Service (Port `5686`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions.
-- **Redis (Port `6381`)**: A separate container that is used for rate limiting to ensure you don’t exceed the Groq API quotas.
 
 An entrypoint script (`docker-entrypoint.sh`) manages starting both the Python and Node.js services in the correct order.
 
@@ -84,29 +66,24 @@ An entrypoint script (`docker-entrypoint.sh`) manages starting both the Python a
 
 Docker volumes are used to persist data and cache models, which is crucial for efficiency.
 
-- `audio_data`: A temporary storage location for audio files during processing.
+- `audio_data`: A temporary storage location for audio files during processing. This is now managed within per-job temporary directories and is not a persistent volume.
 - `models_data`: Stores the downloaded `faster-whisper` models so they don't need to be re-downloaded every time the container starts.
 - `huggingface_cache`: A cache for models downloaded from Hugging Face.
-- `redis_data`: Persists Redis data, so rate-limiting information is not lost on restart.
 
 To clear all cached data, including models, you can run `docker-compose down -v`.
 
 ## ⚙️ Environment Variables
 
-You can customize the service's behavior by setting environment variables in your `.env` file.
+You can customize the service's behavior by setting environment variables in your `.env` file (or by creating one from `.env.docker`).
 
 | Variable | Default | Description |
 | :--- | :--- | :--- |
-| `GROQ_API_KEY` | `(none)` | **Required for cloud mode.** Your API key from Groq. |
-| `DEFAULT_MODEL_TYPE` | `auto` | The default transcription mode: `local`, `cloud`, or `auto`. |
 | `LOCAL_ASR_MODEL` | `base.en` | The default model to use for the local service. |
-| `LOCAL_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for local service. |
-| `LOCAL_MAX_FILE_MB` | `100` | File size threshold in MB for triggering chunking (local service). |
+| `LOCAL_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for the local service. |
+| `LOCAL_MAX_FILE_MB` | `100` | File size threshold in MB for triggering chunking. |
 | `LOCAL_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for local transcription (30 minutes). |
-| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service. |
-| `GROQ_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for cloud service. |
-| `GROQ_MAX_REQUEST_MB` | `15` | File size threshold in MB for chunking (cloud service). |
-| `GROQ_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for Groq transcription (30 minutes). |
+| `FW_DEVICE` | `cpu` | The device to run the model on (`cpu` or `cuda`). |
+| `FW_COMPUTE_TYPE`| `int8`  | The compute type for the model (e.g., `int8`, `float16`). |
 
 ## 🛠️ Useful Docker Commands
 

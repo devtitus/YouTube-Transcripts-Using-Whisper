@@ -48,35 +48,15 @@ This script will:
 - Create a `venv` folder inside `py_asr_service`.
 - Install all the necessary Python packages from `requirements.txt`.
 
-### 4. **Configure Environment Variables**
+### 4. **Configure Environment Variables (Optional)**
 
-Create a `.env` file in the project root by copying the example file:
+You can customize server settings by creating a `.env` file. Copy the example file to get started:
 
 ```bash
 cp .env.example .env
 ```
 
-Now, open the `.env` file and configure it:
-
-```env
-# .env file
-
-# To use the fast cloud-based transcription:
-# Get an API key from https://console.groq.com/keys
-GROQ_API_KEY=your_groq_api_key_here
-
-# To use the private, local-only transcription:
-# Leave GROQ_API_KEY blank.
-
-# You can also set the default model type ("auto", "cloud", or "local")
-DEFAULT_MODEL_TYPE=auto
-
-# Server port
-PORT=5685
-```
-
-- **For Cloud Mode:** Fill in your `GROQ_API_KEY`.
-- **For Local-Only Mode:** Leave `GROQ_API_KEY` empty.
+You can edit this file to change the default model, server port, etc. No API keys are required.
 
 ### 5. **Build the TypeScript Code**
 
@@ -117,4 +97,4 @@ curl -X POST -H "Content-Type: application/json" \
 http://localhost:5685/v1/transcripts
 ```
 
-This will use the `auto` mode, which will try the Groq API first (if a key is provided) and fall back to the local service if needed.
+This will use the default local model (`base.en`). You can specify a different model in the request body if needed.

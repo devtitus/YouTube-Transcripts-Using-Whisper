@@ -25,12 +25,8 @@ _model_cache: Dict[str, WhisperModel] = {}
 
 def resolve_model_name(requested: Optional[str]) -> str:
     name = (requested or DEFAULT_MODEL or "base.en").strip()
+    # Simplified mapping for local models
     mapping = {
-        # Map OpenAI-like names to faster-whisper sizes
-        "whisper-large-v3-turbo": "base.en",
-        "whisper-large-v3": "small.en",
-        "distil-whisper-large-v3-en": "base.en",
-        # Allow ggml names to map to faster-whisper
         "ggml-base.en.bin": "base.en",
         "ggml-small.en.bin": "small.en",
         "ggml-tiny.en.bin": "tiny.en",
@@ -84,7 +80,7 @@ async def transcribe(
         with audio_tmp.open("wb") as out:
             shutil.copyfileobj(file.file, out)
 
-        segments, info = mdl.transcribe(str(audio_tmp), language=language)
+        segments, info = mdl.transcribe(str(audio_tmp), language=language, vad_filter=True)
         out = to_verbose_json(segments, info)
         out["model"] = size
         return out

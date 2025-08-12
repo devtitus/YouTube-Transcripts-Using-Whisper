@@ -8,17 +8,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5685
-      - REDIS_URL=redis://redis:6379
-      
-      # Groq Cloud Configuration
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - GROQ_WHISPER_MODEL=${GROQ_WHISPER_MODEL}
-      - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
-      - GROQ_AUDIO_CODEC=${GROQ_AUDIO_CODEC:-aac}
-      - GROQ_AUDIO_BITRATE_KBPS=${GROQ_AUDIO_BITRATE_KBPS:-32}
-      - GROQ_CHUNK_SECONDS=${GROQ_CHUNK_SECONDS:-600}
-      - GROQ_MAX_REQUEST_MB=${GROQ_MAX_REQUEST_MB:-15}
-      - GROQ_TIMEOUT_MS=${GROQ_TIMEOUT_MS:-1800000}
       
       # Local ASR Configuration
       - LOCAL_ASR_BASE_URL=http://localhost:5686
@@ -26,55 +15,25 @@ services:
       - LOCAL_CHUNK_SECONDS=${LOCAL_CHUNK_SECONDS:-600}
       - LOCAL_MAX_FILE_MB=${LOCAL_MAX_FILE_MB:-100}
       - LOCAL_TIMEOUT_MS=${LOCAL_TIMEOUT_MS:-1800000}
-      - DEFAULT_MODEL_TYPE=${DEFAULT_MODEL_TYPE:-auto}
       
-      # Service Configuration
-      - MAX_SYNC_SECONDS=${MAX_SYNC_SECONDS:-900}
+      # Python Service Configuration
+      - FW_DEVICE=${FW_DEVICE:-cpu}
+      - FW_COMPUTE_TYPE=${FW_COMPUTE_TYPE:-int8}
       
     volumes:
-      - audio_data:/app/audio_file
       - models_data:/app/models
       # Persist Python models to avoid re-downloading
       - huggingface_cache:/root/.cache/huggingface
-    depends_on:
-      - redis
     restart: unless-stopped
-    networks:
-      - transcripts-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz", "&&", "curl", "-f", "http://localhost:5686/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
 
-  redis:
-    image: redis:7-alpine
-    container_name: transcripts-redis
-    ports:
-      - "6381:6379"  # Expose on different port to avoid conflicts
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    networks:
-      - transcripts-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
 volumes:
-  audio_data:
-    driver: local
   models_data:
-    driver: local
-  redis_data:
     driver: local
   huggingface_cache:
     driver: local
-
-networks:
-  transcripts-network:
-    driver: bridge
