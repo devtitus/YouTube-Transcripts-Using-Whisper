@@ -45,6 +45,7 @@ node scripts/setup-python.js
 ```
 
 This script will:
+
 - Create a `venv` folder inside `py_asr_service`.
 - Install all the necessary Python packages from `requirements.txt`.
 
@@ -68,7 +69,6 @@ npm run build
 
 ---
 
-
 ## ▶️ Running the Service
 
 Now you are ready to start the service. The project uses `concurrently` to run both the Node.js API and the Python transcription server at the same time.
@@ -78,8 +78,9 @@ npm run dev
 ```
 
 This command will:
-1.  Start the **Python FastAPI server** for local transcriptions on port `5686`.
-2.  Start the **Node.js Fastify server** for the main API on port `5685`.
+
+1.  Start the **Python FastAPI server** for local transcriptions on port `5689`.
+2.  Start the **Node.js Fastify server** for the main API on port `5688`.
 
 The service is now running in development mode with hot-reloading, so any changes you make to the code will automatically restart the server.
 
@@ -94,7 +95,7 @@ Here is an example of how to transcribe a video and get the result immediately:
 ```bash
 curl -X POST -H "Content-Type: application/json" \
 -d '{"youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
-http://localhost:5685/v1/transcripts
+http://localhost:5688/v1/transcripts
 ```
 
 This will use the default local model (`base.en`). You can specify a different model in the request body if needed.

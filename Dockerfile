@@ -93,13 +93,13 @@ RUN chmod +x /app/docker-entrypoint.sh
 RUN mkdir -p /app/audio_file /app/models
 
 # Expose ports for both services
-EXPOSE 5685 5686
+EXPOSE 5688 5689
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=5685
+ENV PORT=5688
 ENV GROQ_TIMEOUT_MS=1800000
-ENV LOCAL_ASR_BASE_URL=http://localhost:5686
+ENV LOCAL_ASR_BASE_URL=http://localhost:5689
 ENV LOCAL_ASR_MODEL=base.en
 ENV LOCAL_CHUNK_SECONDS=600
 ENV LOCAL_MAX_FILE_MB=100

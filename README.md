@@ -35,7 +35,7 @@ With Docker running, start the services using Docker Compose:
 docker-compose up --build -d
 ```
 
-The service is now running! The main API is available at `http://localhost:5685`.
+The service is now running! The main API is available at `http://localhost:5688`.
 
 ### 3. **Test the API**
 
@@ -43,7 +43,7 @@ You can test the service by sending a `curl` request. Here’s how to transcribe
 
 ```bash
 # Example: Transcribe a video
-curl "http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl "http://localhost:5688/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 You should see a JSON response containing the full transcript.
@@ -63,13 +63,13 @@ You can provide the YouTube URL and options in two ways:
 1.  **Query Parameters (for simple requests):**
 
     ```bash
-    curl "http://localhost:5685/v1/transcripts?url=<YOUTUBE_URL>&model=base.en"
+    curl "http://localhost:5688/v1/transcripts?url=<YOUTUBE_URL>&model=base.en"
     ```
 
 2.  **JSON Body (for more control):**
 
     ```bash
-    curl -X POST http://localhost:5685/v1/transcripts \
+    curl -X POST http://localhost:5688/v1/transcripts \
       -H "Content-Type: application/json" \
       -d '{
         "youtubeUrl": "<YOUTUBE_URL>",
@@ -81,15 +81,16 @@ You can provide the YouTube URL and options in two ways:
 
 ### Parameters
 
-| Parameter | Location | Description | Example |
-| : | : | : | : |
-| `youtubeUrl` or `url` | Body / Query | **Required.** The URL of the YouTube video. | `https://youtube.com/watch?v=...` |
-| `model` | Body / Query | The specific `faster-whisper` model to use. | `small.en` |
-| `language` | Body / Query | A hint for the audio language (e.g., "en", "es"). | `en` |
+| Parameter             | Location     | Description                                       | Example                           |
+| :-------------------- | :----------- | :------------------------------------------------ | :-------------------------------- |
+| `youtubeUrl` or `url` | Body / Query | **Required.** The URL of the YouTube video.       | `https://youtube.com/watch?v=...` |
+| `model`               | Body / Query | The specific `faster-whisper` model to use.       | `small.en`                        |
+| `language`            | Body / Query | A hint for the audio language (e.g., "en", "es"). | `en`                              |
 
 ### Available Models
 
 The following `faster-whisper` models are available:
+
 - `base.en` (default)
 - `small.en`
 - `tiny.en`

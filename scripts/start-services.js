@@ -31,9 +31,9 @@ if (isWindows) {
     // Windows: Use Python executable directly from venv
     const pythonExe = join(venvDir, 'Scripts', 'python.exe');
     pythonProcess = spawn(pythonExe, [
-        '-m', 'uvicorn', 'server:app', 
-        '--host', '0.0.0.0', 
-        '--port', '5686'
+        '-m', 'uvicorn', 'server:app',
+        '--host', '0.0.0.0',
+        '--port', '5689'
     ], {
         cwd: pyAsrDir,
         stdio: ['inherit', 'pipe', 'pipe']
@@ -42,9 +42,9 @@ if (isWindows) {
     // Unix/Linux/macOS: Use Python executable directly from venv
     const pythonExe = join(venvDir, 'bin', 'python');
     pythonProcess = spawn(pythonExe, [
-        '-m', 'uvicorn', 'server:app', 
-        '--host', '0.0.0.0', 
-        '--port', '5686'
+        '-m', 'uvicorn', 'server:app',
+        '--host', '0.0.0.0',
+        '--port', '5689'
     ], {
         cwd: pyAsrDir,
         stdio: ['inherit', 'pipe', 'pipe']
@@ -65,7 +65,7 @@ const checkPythonReady = () => {
     return new Promise((resolve) => {
         const check = async () => {
             try {
-                const response = await fetch('http://localhost:5686/healthz');
+                const response = await fetch('http://localhost:5689/healthz');
                 if (response.ok) {
                     pythonReady = true;
                     console.log('✅ Python ASR server is ready');
@@ -83,7 +83,7 @@ const checkPythonReady = () => {
 checkPythonReady().then(() => {
     console.log('🟢 Starting Node.js server...');
     const nodeArgs = process.argv.slice(2);
-    
+
     let nodeProcess;
     if (nodeArgs.length > 0) {
         // Use provided arguments

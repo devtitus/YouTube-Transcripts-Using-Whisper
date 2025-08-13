@@ -6,7 +6,7 @@ This guide provides detailed instructions for deploying the YouTube Transcriptio
 
 The service is designed to be easy to run using Docker Compose. The setup uses a single container that intelligently runs both the main Node.js API and the Python transcription service, making it resource-efficient and simple to manage.
 
---- 
+---
 
 ## 🏁 Quick Start
 
@@ -44,21 +44,21 @@ docker-compose logs -f
 
 ### 5. **Test the API**
 
-Once the service is running, you can test the API. The service will be available at `http://localhost:5685`.
+Once the service is running, you can test the API. The service will be available at `http://localhost:5688`.
 
 ```bash
 # Test the local model
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=..."
+curl "http://localhost:5688/v1/transcripts?url=https://youtube.com/watch?v=..."
 ```
 
---- 
+---
 
 ## 🏗️ Architecture Overview
 
 The Docker setup consists of two main components running inside a single container:
 
-- **Node.js API (Port `5685`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service.
-- **Python ASR Service (Port `5686`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions.
+- **Node.js API (Port `5688`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service.
+- **Python ASR Service (Port `5689`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions.
 
 An entrypoint script (`docker-entrypoint.sh`) manages starting both the Python and Node.js services in the correct order.
 
@@ -76,14 +76,14 @@ To clear all cached data, including models, you can run `docker-compose down -v`
 
 You can customize the service's behavior by setting environment variables in your `.env` file (or by creating one from `.env.docker`).
 
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `LOCAL_ASR_MODEL` | `base.en` | The default model to use for the local service. |
-| `LOCAL_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for the local service. |
-| `LOCAL_MAX_FILE_MB` | `100` | File size threshold in MB for triggering chunking. |
-| `LOCAL_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for local transcription (30 minutes). |
-| `FW_DEVICE` | `cpu` | The device to run the model on (`cpu` or `cuda`). |
-| `FW_COMPUTE_TYPE`| `int8`  | The compute type for the model (e.g., `int8`, `float16`). |
+| Variable              | Default   | Description                                                           |
+| :-------------------- | :-------- | :-------------------------------------------------------------------- |
+| `LOCAL_ASR_MODEL`     | `base.en` | The default model to use for the local service.                       |
+| `LOCAL_CHUNK_SECONDS` | `600`     | Duration of each audio chunk in seconds for the local service.        |
+| `LOCAL_MAX_FILE_MB`   | `100`     | File size threshold in MB for triggering chunking.                    |
+| `LOCAL_TIMEOUT_MS`    | `1800000` | Request timeout in milliseconds for local transcription (30 minutes). |
+| `FW_DEVICE`           | `cpu`     | The device to run the model on (`cpu` or `cuda`).                     |
+| `FW_COMPUTE_TYPE`     | `int8`    | The compute type for the model (e.g., `int8`, `float16`).             |
 
 ## 🛠️ Useful Docker Commands
 
@@ -113,7 +113,7 @@ docker-compose ps
 
 The service has health check endpoints to ensure it is running correctly.
 
-- **Node.js API:** `curl http://localhost:5685/healthz`
-- **Python ASR Service:** `curl http://localhost:5686/healthz`
+- **Node.js API:** `curl http://localhost:5688/healthz`
+- **Python ASR Service:** `curl http://localhost:5689/healthz`
 
 Docker Compose automatically uses these health checks to monitor the container status.

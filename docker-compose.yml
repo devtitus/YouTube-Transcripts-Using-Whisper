@@ -3,30 +3,30 @@ services:
     build: .
     container_name: transcripts-app
     ports:
-      - "5685:5685"  # Node.js API
-      - "5686:5686"  # Python ASR service
+      - "5688:5688" # Node.js API
+      - "5689:5689" # Python ASR service
     environment:
       - NODE_ENV=production
-      - PORT=5685
-      
+      - PORT=5688
+
       # Local ASR Configuration
-      - LOCAL_ASR_BASE_URL=http://localhost:5686
+      - LOCAL_ASR_BASE_URL=http://localhost:5689
       - LOCAL_ASR_MODEL=${LOCAL_ASR_MODEL:-base.en}
       - LOCAL_CHUNK_SECONDS=${LOCAL_CHUNK_SECONDS:-600}
       - LOCAL_MAX_FILE_MB=${LOCAL_MAX_FILE_MB:-100}
       - LOCAL_TIMEOUT_MS=${LOCAL_TIMEOUT_MS:-1800000}
-      
+
       # Python Service Configuration
       - FW_DEVICE=${FW_DEVICE:-cpu}
       - FW_COMPUTE_TYPE=${FW_COMPUTE_TYPE:-int8}
-      
+
     volumes:
       - models_data:/app/models
       # Persist Python models to avoid re-downloading
       - huggingface_cache:/root/.cache/huggingface
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5688/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -31,12 +31,12 @@ wait_for_service() {
 echo "🐍 Starting Python ASR service..."
 cd /app/py_asr_service
 # Activate virtual environment and start service
-/opt/venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 5686 &
+/opt/venv/bin/python -m uvicorn server:app --host 0.0.0.0 --port 5689 &
 PYTHON_PID=$!
 echo "🐍 Python ASR service started with PID $PYTHON_PID"
 
 # Wait for Python service to be ready
-wait_for_service "Python ASR service" "http://localhost:5686/healthz"
+wait_for_service "Python ASR service" "http://localhost:5689/healthz"
 
 # Start Node.js service
 echo "🟢 Starting Node.js API service..."

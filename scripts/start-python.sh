@@ -28,5 +28,5 @@ echo "Installing Python dependencies..."
 pip install -r requirements.txt
 
 # Start the server
-echo "Starting Python ASR server on port 5686..."
-uvicorn server:app --host 0.0.0.0 --port 5686
+echo "Starting Python ASR server on port 5689..."
+uvicorn server:app --host 0.0.0.0 --port 5689
