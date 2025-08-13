@@ -6,7 +6,7 @@ This guide provides detailed instructions for deploying the YouTube Transcriptio
 
 The service is packaged into a single, lightweight Docker container that runs the Node.js application. It is configured to use the Groq API for all transcription tasks.
 
---- 
+---
 
 ## 🏁 Quick Start
 
@@ -52,24 +52,25 @@ docker-compose logs -f
 
 ### 4. **Test the API**
 
-Once the service is running, you can test the API, which will be available at `http://localhost:5685`.
+Once the service is running, you can test the API, which will be available at `http://localhost:5687`.
 
 ```bash
 # Send a request to the transcription endpoint
-curl "http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl "http://localhost:5687/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 If you set an `API_KEY` in your `.env` file, include it as a header:
+
 ```bash
 curl -H "X-API-Key: your_secret_key" \
-"http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+"http://localhost:5687/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
---- 
+---
 
 ## 🏗️ Architecture Overview
 
-The Docker setup consists of a single **Node.js API** service running on port `5685`. It handles job creation, downloads audio, sends it to the Groq API for transcription, and returns the result.
+The Docker setup consists of a single **Node.js API** service running on port `5687`. It handles job creation, downloads audio, sends it to the Groq API for transcription, and returns the result.
 
 ## 📦 Volumes
 
@@ -83,14 +84,14 @@ To clear this volume, you can run `docker-compose down -v`.
 
 You can customize the service's behavior by setting environment variables in your `.env` file.
 
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `GROQ_API_KEY` | `(none)` | **Required.** Your API key from Groq. |
-| `API_KEY` | `(none)` | An optional secret key to protect the API endpoint. |
-| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service. |
-| `GROQ_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds. |
-| `GROQ_MAX_REQUEST_MB` | `15` | File size threshold in MB for triggering chunking. |
-| `GROQ_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for Groq transcription. |
+| Variable              | Default                  | Description                                             |
+| :-------------------- | :----------------------- | :------------------------------------------------------ |
+| `GROQ_API_KEY`        | `(none)`                 | **Required.** Your API key from Groq.                   |
+| `API_KEY`             | `(none)`                 | An optional secret key to protect the API endpoint.     |
+| `GROQ_WHISPER_MODEL`  | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service.    |
+| `GROQ_CHUNK_SECONDS`  | `600`                    | Duration of each audio chunk in seconds.                |
+| `GROQ_MAX_REQUEST_MB` | `15`                     | File size threshold in MB for triggering chunking.      |
+| `GROQ_TIMEOUT_MS`     | `1800000`                | Request timeout in milliseconds for Groq transcription. |
 
 ## 🛠️ Useful Docker Commands
 
@@ -120,4 +121,4 @@ docker-compose ps
 
 The service has a health check endpoint to ensure it is running correctly. Docker Compose automatically uses this to monitor the container's status.
 
-- **Node.js API:** `curl http://localhost:5685/healthz`
+- **Node.js API:** `curl http://localhost:5687/healthz`

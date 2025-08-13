@@ -53,7 +53,7 @@ GROQ_API_KEY=your_groq_api_key_here
 # API_KEY=a_secret_key_for_your_service
 
 # Server port
-PORT=5685
+PORT=5687
 ```
 
 - The `GROQ_API_KEY` is required for the service to work.
@@ -68,7 +68,7 @@ Now you are ready to start the service.
 npm run dev
 ```
 
-This command starts the **Node.js Fastify server** on port `5685`. The service runs in development mode with hot-reloading, so any changes you make to the code will automatically restart the server.
+This command starts the **Node.js Fastify server** on port `5687`. The service runs in development mode with hot-reloading, so any changes you make to the code will automatically restart the server.
 
 ## 🧪 How to Use the Service
 
@@ -79,12 +79,12 @@ Once the service is running, you can send `POST` requests to the `/v1/transcript
 Here is an example of how to transcribe a video:
 
 ```bash
-curl "http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl "http://localhost:5687/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 If you have set an `API_KEY` in your `.env` file, you must include it in the header:
 
 ```bash
 curl -H "X-API-Key: a_secret_key_for_your_service" \
-"http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+"http://localhost:5687/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```

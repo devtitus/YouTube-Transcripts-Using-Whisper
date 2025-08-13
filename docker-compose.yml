@@ -3,10 +3,10 @@ services:
     build: .
     container_name: transcripts-app
     ports:
-      - "5685:5685"  # Node.js API
+      - "5687:5687"  # Node.js API
     environment:
       - NODE_ENV=production
-      - PORT=5685
+      - PORT=5687
       
       # Groq Cloud Configuration
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -21,10 +21,8 @@ services:
     volumes:
       - audio_data:/app/audio_file
     restart: unless-stopped
-    networks:
-      - transcripts-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5685/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:5687/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -33,7 +31,3 @@ services:
 volumes:
   audio_data:
     driver: local
-
-networks:
-  transcripts-network:
-    driver: bridge

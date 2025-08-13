@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import "dotenv/config";
 import Fastify from "fastify";
 import { z } from "zod";
 import path from "node:path";
@@ -7,44 +7,56 @@ import crypto from "node:crypto";
 import { loadConfig } from "./config.js";
 
 import type { CreateTranscriptRequest, TranscriptJSON } from "./types.js";
-import { downloadAudioForJob, convertToWav16kMono, fetchVideoDurationSeconds } from "./pipeline/download.js";
+import {
+  downloadAudioForJob,
+  convertToWav16kMono,
+  fetchVideoDurationSeconds,
+} from "./pipeline/download.js";
 import { reserveForGroq, checkDailyExhaustion } from "./limits/rateLimiter.js";
 
 import { transcribeWithGroq } from "./pipeline/transcribe_groq.js";
 
 const cfg = loadConfig();
-const app = Fastify({ 
+const app = Fastify({
   logger: true,
   connectionTimeout: 0, // Disable connection timeout
-  keepAliveTimeout: 0,  // Disable keep-alive timeout
-  requestTimeout: 0,    // Disable request timeout for long video processing
+  keepAliveTimeout: 0, // Disable keep-alive timeout
+  requestTimeout: 0, // Disable request timeout for long video processing
 });
 
 // Add a pre-handler hook for API key authentication
-app.addHook('preHandler', async (request, reply) => {
-  if (request.routerPath === '/v1/transcripts' && cfg.apiKey) {
-    const apiKey = request.headers['x-api-key'];
+app.addHook("preHandler", async (request, reply) => {
+  if (request.routeOptions.url === "/v1/transcripts" && cfg.apiKey) {
+    const apiKey = request.headers["x-api-key"];
     if (!apiKey || apiKey !== cfg.apiKey) {
-      reply.code(401).send({ error: 'Unauthorized: Invalid or missing API key' });
+      reply
+        .code(401)
+        .send({ error: "Unauthorized: Invalid or missing API key" });
     }
   }
 });
 
 const CreateSchema = z.object({
   youtubeUrl: z.string().url(),
-  options: z.object({
-    language: z.string().optional(),
-    model: z.string().optional(),
-    temperature: z.number().optional(),
-    translateTo: z.string().optional(),
-  }).optional(),
+  options: z
+    .object({
+      language: z.string().optional(),
+      model: z.string().optional(),
+      temperature: z.number().optional(),
+      translateTo: z.string().optional(),
+    })
+    .optional(),
 });
 
 function newJobId(): string {
   return crypto.randomUUID();
 }
 
-async function processTranscription(jobId: string, youtubeUrl: string, opts: { language?: string; model?: string }): Promise<TranscriptJSON> {
+async function processTranscription(
+  jobId: string,
+  youtubeUrl: string,
+  opts: { language?: string; model?: string }
+): Promise<TranscriptJSON> {
   try {
     const { audioPath } = await downloadAudioForJob(jobId, youtubeUrl);
     // Use temporary directory for processing
@@ -54,9 +66,11 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
 
     // Always use Groq (cloud) transcription
     if (!cfg.groqApiKey) {
-      throw new Error("Groq transcription requested but GROQ_API_KEY not configured");
+      throw new Error(
+        "Groq transcription requested but GROQ_API_KEY not configured"
+      );
     }
-    
+
     app.log.info(`Using cloud transcription service for job ${jobId}`);
     const result = await transcribeWithGroq({
       jobId,
@@ -70,7 +84,9 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
     const { outPrefix, jsonPath, srtPath, vttPath, txtPath } = result;
 
     // Read the transcript result
-    const transcriptResult = JSON.parse(fs.readFileSync(jsonPath, "utf-8")) as TranscriptJSON;
+    const transcriptResult = JSON.parse(
+      fs.readFileSync(jsonPath, "utf-8")
+    ) as TranscriptJSON;
 
     // Clean up temporary files and directories
     try {
@@ -83,7 +99,7 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
         fs.unlinkSync(wavPath);
         app.log.info(`Cleaned up wav file: ${wavPath}`);
       }
-      
+
       // Remove the entire temporary directory for this job
       if (fs.existsSync(outBaseDir)) {
         fs.rmSync(outBaseDir, { recursive: true, force: true });
@@ -96,7 +112,7 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
     return transcriptResult;
   } catch (err: any) {
     app.log.error({ err }, "Job failed");
-    
+
     // Clean up temporary files even on failure
     try {
       const outBaseDir = path.join(cfg.audioDir, `temp_${jobId}`);
@@ -107,7 +123,7 @@ async function processTranscription(jobId: string, youtubeUrl: string, opts: { l
     } catch (cleanupError) {
       app.log.warn(`Cleanup after failure warning: ${cleanupError}`);
     }
-    
+
     throw err;
   }
 }
@@ -120,10 +136,13 @@ app.post("/v1/transcripts", async (req, reply) => {
 
   let youtubeUrl: string;
   let options: { language?: string; model?: string } = {};
-  
+
   // Check if we have JSON body or should use query params
-  const hasJsonBody = req.headers["content-type"]?.includes("application/json") && req.body && Object.keys(req.body as any).length > 0;
-  
+  const hasJsonBody =
+    req.headers["content-type"]?.includes("application/json") &&
+    req.body &&
+    Object.keys(req.body as any).length > 0;
+
   if (hasJsonBody) {
     const parsed = CreateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -138,22 +157,29 @@ app.post("/v1/transcripts", async (req, reply) => {
   } else {
     // Use query parameters
     const url = q?.youtubeUrl || q?.url;
-    if (!url) return reply.code(400).send({ error: "youtubeUrl or url is required" });
-    
+    if (!url)
+      return reply.code(400).send({ error: "youtubeUrl or url is required" });
+
     youtubeUrl = url;
-    options = { 
-      language: langParam, 
-      model: modelParam, 
+    options = {
+      language: langParam,
+      model: modelParam,
     };
   }
 
   // Validate model parameter
   if (options.model) {
     // Cloud models (Groq)
-    const validCloudModels = ["distil-whisper-large-v3-en", "whisper-large-v3-turbo", "whisper-large-v3"];
+    const validCloudModels = [
+      "distil-whisper-large-v3-en",
+      "whisper-large-v3-turbo",
+      "whisper-large-v3",
+    ];
     if (!validCloudModels.includes(options.model)) {
       return reply.code(400).send({
-        error: `Invalid cloud model. Must be one of: ${validCloudModels.join(", ")}`
+        error: `Invalid cloud model. Must be one of: ${validCloudModels.join(
+          ", "
+        )}`,
       });
     }
   }
@@ -162,16 +188,22 @@ app.post("/v1/transcripts", async (req, reply) => {
 
   // Estimate duration; apply rate limiting for Groq
   const anticipatedSeconds = await fetchVideoDurationSeconds(youtubeUrl);
-    
+
   if (cfg.groqApiKey) {
     const daily = await checkDailyExhaustion(anticipatedSeconds);
     if (daily.requestsExhausted) {
-      return reply.code(429).send({ error: "Daily request quota (2000) exhausted. Try tomorrow." });
+      return reply
+        .code(429)
+        .send({ error: "Daily request quota (2000) exhausted. Try tomorrow." });
     }
     if (daily.audioSecondsExhausted) {
-      return reply.code(429).send({ error: "Daily audio seconds quota (28800s) exhausted. Try tomorrow." });
+      return reply
+        .code(429)
+        .send({
+          error: "Daily audio seconds quota (28800s) exhausted. Try tomorrow.",
+        });
     }
-    
+
     // Reserve only if we actually start processing
     await reserveForGroq(anticipatedSeconds || 0);
   }
@@ -181,7 +213,9 @@ app.post("/v1/transcripts", async (req, reply) => {
     return reply.code(200).send({ id, result });
   } catch (error: any) {
     app.log.error({ error, id }, "Transcription failed");
-    return reply.code(500).send({ error: error.message || "Transcription failed" });
+    return reply
+      .code(500)
+      .send({ error: error.message || "Transcription failed" });
   }
 });
 
@@ -202,13 +236,13 @@ const start = async () => {
 };
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  app.log.info('Received SIGINT, shutting down gracefully...');
+process.on("SIGINT", async () => {
+  app.log.info("Received SIGINT, shutting down gracefully...");
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
-  app.log.info('Received SIGTERM, shutting down gracefully...');
+process.on("SIGTERM", async () => {
+  app.log.info("Received SIGTERM, shutting down gracefully...");
   process.exit(0);
 });
 

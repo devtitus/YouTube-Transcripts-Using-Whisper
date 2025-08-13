@@ -43,7 +43,7 @@ With Docker running, start the service using Docker Compose:
 docker-compose up --build -d
 ```
 
-The service is now running! The main API is available at `http://localhost:5685`.
+The service is now running! The main API is available at `http://localhost:5687`.
 
 ### 3. **Test the API**
 
@@ -51,7 +51,7 @@ You can test the service by sending a `curl` request. Here’s how to transcribe
 
 ```bash
 # Example: Transcribe a video
-curl "http://localhost:5685/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl "http://localhost:5687/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 You should see a JSON response containing the full transcript.
@@ -71,13 +71,13 @@ You can provide the YouTube URL and options in two ways:
 1.  **Query Parameters (for simple requests):**
 
     ```bash
-    curl "http://localhost:5685/v1/transcripts?url=<YOUTUBE_URL>&model=whisper-large-v3"
+    curl "http://localhost:5687/v1/transcripts?url=<YOUTUBE_URL>&model=whisper-large-v3"
     ```
 
 2.  **JSON Body (for more control):**
 
     ```bash
-    curl -X POST http://localhost:5685/v1/transcripts \
+    curl -X POST http://localhost:5687/v1/transcripts \
       -H "Content-Type: application/json" \
       -d '{
         "youtubeUrl": "<YOUTUBE_URL>",
@@ -89,11 +89,11 @@ You can provide the YouTube URL and options in two ways:
 
 ### Parameters
 
-| Parameter | Location | Description | Example |
-| : | : | : | : |
-| `youtubeUrl` or `url` | Body / Query | **Required.** The URL of the YouTube video. | `https://youtube.com/watch?v=...` |
-| `model` | Body / Query | The specific Groq model to use. See below for options. | `whisper-large-v3` |
-| `language` | Body / Query | A hint for the audio language (e.g., "en", "es"). | `en` |
+| Parameter             | Location     | Description                                            | Example                           |
+| :-------------------- | :----------- | :----------------------------------------------------- | :-------------------------------- |
+| `youtubeUrl` or `url` | Body / Query | **Required.** The URL of the YouTube video.            | `https://youtube.com/watch?v=...` |
+| `model`               | Body / Query | The specific Groq model to use. See below for options. | `whisper-large-v3`                |
+| `language`            | Body / Query | A hint for the audio language (e.g., "en", "es").      | `en`                              |
 
 ### Available Models
 

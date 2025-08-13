@@ -34,7 +34,7 @@ export function loadConfig(): ServiceConfig {
   const ffmpegCmd = process.env.FFMPEG_CMD || ffmpegResolved || "ffmpeg";
   // We use yt-dlp-exec directly; keep YTDLP_CMD only as a last-resort fallback
   const ytdlpCmd = process.env.YTDLP_CMD || "yt-dlp";
-  const port = parseInt(process.env.PORT || "5685", 10);
+  const port = parseInt(process.env.PORT || "5687", 10);
   const apiKey = process.env.API_KEY || undefined;
   const groqApiKey = process.env.GROQ_API_KEY || undefined;
   const groqBaseUrl = process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1";
