@@ -1,7 +1,7 @@
 services:
   transcripts-service:
     build: .
-    container_name: transcripts-app
+    container_name: transcripts-app-local
     ports:
       - "5688:5688" # Node.js API
       - "5689:5689" # Python ASR service
@@ -11,14 +11,15 @@ services:
 
       # Local ASR Configuration
       - LOCAL_ASR_BASE_URL=http://localhost:5689
-      - LOCAL_ASR_MODEL=${LOCAL_ASR_MODEL:-base.en}
-      - LOCAL_CHUNK_SECONDS=${LOCAL_CHUNK_SECONDS:-600}
+      - LOCAL_ASR_MODEL=${LOCAL_ASR_MODEL:-base}
+      - LOCAL_CHUNK_SECONDS=${LOCAL_CHUNK_SECONDS:-90}
       - LOCAL_MAX_FILE_MB=${LOCAL_MAX_FILE_MB:-100}
-      - LOCAL_TIMEOUT_MS=${LOCAL_TIMEOUT_MS:-1800000}
+      - LOCAL_TIMEOUT_MS=${LOCAL_TIMEOUT_MS:-3600000}
 
       # Python Service Configuration
       - FW_DEVICE=${FW_DEVICE:-cpu}
       - FW_COMPUTE_TYPE=${FW_COMPUTE_TYPE:-int8}
+      - DEFAULT_MODEL=${LOCAL_ASR_MODEL:-base}
 
     volumes:
       - models_data:/app/models

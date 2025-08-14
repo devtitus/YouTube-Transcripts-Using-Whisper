@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fetch, FormData, File } from "undici";
-import type { TranscriptJSON, TranscriptSegment } from "../types.js";
-import { loadConfig } from "../config.js";
 import { runCommand } from "../utils/process.js";
+import type { TranscriptJSON, TranscriptSegment } from "../types.js";
+import type { WhisperModel } from "../constants.js";
+import { loadConfig } from "../config.js";
 
 const cfg = loadConfig();
 
@@ -13,7 +14,11 @@ export interface LocalTranscribeOptions {
   baseDir: string;
   youtubeUrl: string;
   language?: string;
-  model?: string; // base.en | small.en | ggml-base.en.bin | ggml-small.en.bin
+  model?: WhisperModel; // Use centralized model type
+  task?: "transcribe" | "translate"; // Default: "transcribe", "translate" for X-language -> English
+  enableChunking?: boolean; // New option to enable chunking for faster processing
+  chunkDurationSeconds?: number; // Chunk size (default: 120 seconds)
+  overlapSeconds?: number; // Overlap between chunks (default: 10 seconds)
 }
 
 export async function transcribeWithLocal(opts: LocalTranscribeOptions) {
@@ -33,108 +38,45 @@ export async function transcribeWithLocal(opts: LocalTranscribeOptions) {
 
   // Use the provided model or fall back to config default
   const modelToUse = opts.model || cfg.localAsrModel;
+  const taskToUse = opts.task || "transcribe"; // Default to transcription
 
-  // Check if we need to chunk the audio file
-  const needsChunking = await shouldChunkAudio(opts.wavPath);
-  let result;
+  // Choose processing strategy based on options
+  let transcriptionResult;
 
-  if (needsChunking) {
-    // Split into chunks and process each chunk
-    const chunkPaths = await splitAudioIntoChunks(
-      opts.wavPath,
-      cfg.localChunkSeconds,
-      opts.baseDir
+  if (opts.enableChunking) {
+    // Chunked processing for faster output
+    console.log(
+      `[DEBUG] Using chunked transcription for faster processing: ${opts.wavPath}`
     );
+    const chunkDuration = opts.chunkDurationSeconds || 120; // 2 minutes default
+    const overlapDuration = opts.overlapSeconds || 10; // 10 seconds overlap
 
-    // Process each chunk and merge results
-    const merged: TranscriptJSON = {
-      id: opts.jobId,
-      youtubeUrl: opts.youtubeUrl,
-      language: undefined,
-      durationMs: 0,
-      model: modelToUse,
-      text: "",
-      segments: [],
-    };
-
-    let cumulativeOffsetMs = 0;
-    let detectedLanguage: string | undefined = opts.language;
-
-    for (let i = 0; i < chunkPaths.length; i++) {
-      const chunkPath = chunkPaths[i];
-
-      // Transcribe this chunk
-      const chunkResult = await transcribeFileWithLocal(
-        chunkPath,
-        detectedLanguage,
-        modelToUse
-      );
-      const normalizedChunk = normalizeLocalAsrResponse(
-        chunkResult,
-        `${opts.jobId}_chunk_${i}`,
-        opts.youtubeUrl,
-        modelToUse
-      );
-
-      // Set detected language from first chunk
-      if (!detectedLanguage && normalizedChunk.language) {
-        detectedLanguage = normalizedChunk.language;
-        merged.language = detectedLanguage;
-      }
-
-      // Offset timestamps and merge segments with overlap handling
-      const overlapWindowMs = 2000; // tolerate 2s overlap
-      for (const seg of normalizedChunk.segments) {
-        const adjusted: TranscriptSegment = {
-          idx: merged.segments.length,
-          startMs: seg.startMs + cumulativeOffsetMs,
-          endMs: seg.endMs + cumulativeOffsetMs,
-          text: seg.text,
-        };
-
-        const last = merged.segments[merged.segments.length - 1];
-        const isOverlapping =
-          last &&
-          adjusted.startMs < last.endMs - Math.min(500, overlapWindowMs / 2);
-        const isDuplicateText =
-          last && normalizeText(last.text) === normalizeText(adjusted.text);
-
-        if (isOverlapping && isDuplicateText) {
-          continue; // Skip duplicate segment
-        }
-
-        merged.segments.push(adjusted);
-      }
-
-      // Update cumulative offset based on last segment end
-      cumulativeOffsetMs = merged.segments.length
-        ? merged.segments[merged.segments.length - 1].endMs
-        : cumulativeOffsetMs;
-    }
-
-    merged.text = merged.segments
-      .map((s) => s.text)
-      .join(" ")
-      .trim();
-    merged.durationMs = merged.segments.length
-      ? merged.segments[merged.segments.length - 1].endMs
-      : merged.durationMs;
-
-    result = merged;
+    transcriptionResult = await transcribeWithChunks(
+      opts.wavPath,
+      opts.language,
+      modelToUse,
+      taskToUse,
+      chunkDuration,
+      overlapDuration
+    );
   } else {
-    // Process entire file as single chunk
+    // Single file processing for best quality (no chunking to avoid hallucinations)
+    console.log(`[DEBUG] Transcribing entire file: ${opts.wavPath}`);
     const singleResult = await transcribeFileWithLocal(
       opts.wavPath,
       opts.language,
-      modelToUse
+      modelToUse,
+      taskToUse
     );
-    result = normalizeLocalAsrResponse(
-      singleResult,
-      opts.jobId,
-      opts.youtubeUrl,
-      modelToUse
-    );
+    transcriptionResult = singleResult;
   }
+
+  const result = normalizeLocalAsrResponse(
+    transcriptionResult,
+    opts.jobId,
+    opts.youtubeUrl,
+    modelToUse
+  );
 
   // Save outputs in the same format as other transcription methods
   const outPrefix = path.join(opts.baseDir, `whisper_${opts.jobId}`);
@@ -158,7 +100,8 @@ export async function transcribeWithLocal(opts: LocalTranscribeOptions) {
 async function transcribeFileWithLocal(
   filePath: string,
   language: string | undefined,
-  model: string
+  model: string,
+  task: string = "transcribe"
 ) {
   const form = new FormData();
 
@@ -172,6 +115,7 @@ async function transcribeFileWithLocal(
   // Prepare form data
   form.append("file", file);
   form.append("model", model);
+  form.append("task", task); // Add translation task support
   if (language) {
     form.append("language", language);
   }
@@ -282,54 +226,250 @@ function pad3(n: number) {
   return n.toString().padStart(3, "0");
 }
 
-async function shouldChunkAudio(filePath: string): Promise<boolean> {
-  try {
-    const stats = fs.statSync(filePath);
-    const fileSizeMb = stats.size / (1024 * 1024);
-    return fileSizeMb > cfg.localMaxFileMb;
-  } catch (error) {
-    // If we can't determine file size, assume chunking is needed for safety
-    return true;
-  }
-}
-
-async function splitAudioIntoChunks(
-  inputPath: string,
-  chunkSeconds: number,
-  baseDir: string
-): Promise<string[]> {
-  // Use WAV format for local processing to maintain quality
-  const outPattern = path.join(baseDir, `local_chunk_%03d.wav`);
-  const args = [
-    "-y",
-    "-i",
-    inputPath,
-    "-f",
-    "segment",
-    "-segment_time",
-    String(chunkSeconds),
-    "-reset_timestamps",
-    "1",
-    "-map",
-    "0:a",
-    "-c",
-    "copy", // Keep as WAV
-    outPattern,
-  ];
-  await runCommand(cfg.ffmpegCmd, args);
-
-  // List generated files in numeric order
-  const files = fs
-    .readdirSync(baseDir)
-    .filter((f) => f.startsWith("local_chunk_") && f.endsWith(".wav"))
-    .sort();
-  return files.map((f) => path.join(baseDir, f));
-}
-
 function normalizeText(text: string): string {
   return text
     .toLowerCase()
     .replace(/[\p{P}\p{S}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Transcribe audio using chunks for faster processing and streaming-like output
+ */
+async function transcribeWithChunks(
+  audioPath: string,
+  language: string | undefined,
+  model: string,
+  task: string,
+  chunkDurationSeconds: number,
+  overlapSeconds: number
+) {
+  console.log(
+    `[CHUNKING] Starting chunked transcription: ${chunkDurationSeconds}s chunks with ${overlapSeconds}s overlap`
+  );
+
+  // Create chunks using ffmpeg
+  const chunks = await createAudioChunks(
+    audioPath,
+    chunkDurationSeconds,
+    overlapSeconds
+  );
+
+  // Process chunks in parallel for speed
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk, index) => {
+      console.log(
+        `[CHUNKING] Processing chunk ${index + 1}/${chunks.length}: ${
+          chunk.startTime
+        }s-${chunk.endTime}s`
+      );
+
+      const result = await transcribeFileWithLocal(
+        chunk.filePath,
+        language,
+        model,
+        task
+      );
+
+      const transcriptResult = result as any; // Local ASR response type
+
+      return {
+        text: transcriptResult.text,
+        language: transcriptResult.language,
+        duration: transcriptResult.duration,
+        segments: transcriptResult.segments,
+        model: transcriptResult.model,
+        chunkIndex: index,
+        startOffset: chunk.startTime,
+        endOffset: chunk.endTime,
+        originalFilePath: chunk.filePath,
+      };
+    })
+  );
+
+  // Merge results and handle overlaps
+  const mergedResult = mergeChunkResults(chunkResults, overlapSeconds);
+
+  // Clean up temporary chunk files
+  await cleanupChunkFiles(chunks);
+
+  console.log(
+    `[CHUNKING] Completed chunked transcription: ${chunkResults.length} chunks processed`
+  );
+  return mergedResult;
+}
+
+/**
+ * Create audio chunks using ffmpeg
+ */
+async function createAudioChunks(
+  audioPath: string,
+  chunkDurationSeconds: number,
+  overlapSeconds: number
+): Promise<Array<{ filePath: string; startTime: number; endTime: number }>> {
+  // Get audio duration first
+  const { stdout: durationOutput } = await runCommand("ffprobe", [
+    "-v",
+    "quiet",
+    "-show_entries",
+    "format=duration",
+    "-of",
+    "csv=p=0",
+    audioPath,
+  ]);
+
+  const totalDuration = parseFloat(durationOutput.trim());
+  console.log(`[CHUNKING] Total audio duration: ${totalDuration.toFixed(2)}s`);
+
+  const chunks: Array<{
+    filePath: string;
+    startTime: number;
+    endTime: number;
+  }> = [];
+  const baseDir = path.dirname(audioPath);
+  const baseExt = path.extname(audioPath);
+  const baseName = path.basename(audioPath, baseExt);
+
+  let currentStart = 0;
+  let chunkIndex = 0;
+
+  while (currentStart < totalDuration) {
+    const chunkEnd = Math.min(
+      currentStart + chunkDurationSeconds,
+      totalDuration
+    );
+    const chunkPath = path.join(
+      baseDir,
+      `${baseName}_chunk_${chunkIndex}${baseExt}`
+    );
+
+    // Extract chunk with ffmpeg
+    await runCommand("ffmpeg", [
+      "-i",
+      audioPath,
+      "-ss",
+      currentStart.toString(),
+      "-t",
+      (chunkEnd - currentStart).toString(),
+      "-c",
+      "copy",
+      "-y",
+      chunkPath,
+    ]);
+
+    chunks.push({
+      filePath: chunkPath,
+      startTime: currentStart,
+      endTime: chunkEnd,
+    });
+
+    // Move to next chunk (with overlap consideration)
+    currentStart += chunkDurationSeconds - overlapSeconds;
+    chunkIndex++;
+  }
+
+  console.log(`[CHUNKING] Created ${chunks.length} audio chunks`);
+  return chunks;
+}
+
+/**
+ * Merge transcription results from multiple chunks, handling overlaps
+ */
+function mergeChunkResults(chunkResults: any[], overlapSeconds: number) {
+  if (chunkResults.length === 0) {
+    throw new Error("No chunk results to merge");
+  }
+
+  if (chunkResults.length === 1) {
+    return chunkResults[0];
+  }
+
+  // Sort by chunk index to ensure proper order
+  chunkResults.sort((a, b) => a.chunkIndex - b.chunkIndex);
+
+  let mergedText = "";
+  let mergedSegments: any[] = [];
+  let cumulativeOffset = 0;
+
+  for (let i = 0; i < chunkResults.length; i++) {
+    const chunk = chunkResults[i];
+    const isFirstChunk = i === 0;
+    const isLastChunk = i === chunkResults.length - 1;
+
+    if (isFirstChunk) {
+      // First chunk: take everything
+      mergedText = chunk.text;
+      mergedSegments =
+        chunk.segments?.map((seg: any) => ({
+          ...seg,
+          start: seg.start,
+          end: seg.end,
+        })) || [];
+      cumulativeOffset = chunk.endOffset;
+    } else {
+      // Subsequent chunks: handle overlap
+      let chunkText = chunk.text || "";
+      let chunkSegments = chunk.segments || [];
+
+      if (!isLastChunk) {
+        // Remove overlap from the end (except for last chunk)
+        chunkSegments = chunkSegments.filter(
+          (seg: any) =>
+            seg.start < chunk.endOffset - chunk.startOffset - overlapSeconds
+        );
+
+        // Trim text to match segments
+        if (chunkSegments.length > 0) {
+          const lastSegEnd = chunkSegments[chunkSegments.length - 1].end;
+          const words = chunkText.split(" ");
+          const segmentWords = chunkSegments
+            .map((s: any) => s.text)
+            .join(" ")
+            .split(" ");
+          chunkText = segmentWords.join(" ");
+        }
+      }
+
+      // Adjust timestamps and add to merged results
+      const adjustedSegments = chunkSegments.map((seg: any) => ({
+        ...seg,
+        start: seg.start + chunk.startOffset,
+        end: seg.end + chunk.startOffset,
+      }));
+
+      mergedText += (mergedText ? " " : "") + chunkText;
+      mergedSegments.push(...adjustedSegments);
+    }
+  }
+
+  // Use the structure from the first chunk as template
+  const baseResult = chunkResults[0];
+  return {
+    ...baseResult,
+    text: mergedText.trim(),
+    segments: mergedSegments,
+    duration: chunkResults[chunkResults.length - 1].endOffset,
+  };
+}
+
+/**
+ * Clean up temporary chunk files
+ */
+async function cleanupChunkFiles(
+  chunks: Array<{ filePath: string; startTime: number; endTime: number }>
+) {
+  for (const chunk of chunks) {
+    try {
+      if (fs.existsSync(chunk.filePath)) {
+        fs.unlinkSync(chunk.filePath);
+      }
+    } catch (error) {
+      console.warn(
+        `[CHUNKING] Failed to cleanup chunk file ${chunk.filePath}:`,
+        error
+      );
+    }
+  }
+  console.log(`[CHUNKING] Cleaned up ${chunks.length} temporary chunk files`);
 }

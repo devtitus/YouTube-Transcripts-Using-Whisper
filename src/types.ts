@@ -1,9 +1,12 @@
+import type { WhisperModel } from "./constants.js";
+
 export interface CreateTranscriptRequest {
   youtubeUrl: string;
   options?: {
     language?: string;
-    model?: string; // e.g., ggml-base.en.bin, whisper-large-v3-turbo, base.en
+    model?: WhisperModel; // Use centralized model type
     modelType?: "local" | "cloud" | "auto"; // routing preference
+    task?: "transcribe" | "translate"; // Add translation task support
     temperature?: number;
     translateTo?: string; // optional future use
   };

@@ -2,6 +2,7 @@ import "dotenv/config";
 import path from "node:path";
 import fs from "node:fs";
 import ffmpegStatic from "ffmpeg-static";
+import { DEFAULT_WHISPER_MODEL } from "./constants.js";
 
 export interface ServiceConfig {
   audioDir: string;
@@ -11,8 +12,6 @@ export interface ServiceConfig {
   // Local ASR service configuration
   localAsrBaseUrl: string; // e.g., http://localhost:5689
   localAsrModel: string; // default model for local service
-  localChunkSeconds: number; // e.g., 600 (10 minutes) for local service
-  localMaxFileMb: number; // when larger than this, chunk for local service
   localTimeoutMs: number; // timeout for local transcription requests
 }
 
@@ -36,19 +35,11 @@ export function loadConfig(): ServiceConfig {
   // Local ASR service configuration
   const localAsrBaseUrl =
     process.env.LOCAL_ASR_BASE_URL || "http://localhost:5689";
-  const localAsrModel = process.env.LOCAL_ASR_MODEL || "base.en";
-  const localChunkSeconds = Math.max(
-    120,
-    parseInt(process.env.LOCAL_CHUNK_SECONDS || "600", 10) || 600
-  );
-  const localMaxFileMb = Math.max(
-    5,
-    parseInt(process.env.LOCAL_MAX_FILE_MB || "100", 10) || 100
-  );
+  const localAsrModel = process.env.LOCAL_ASR_MODEL || DEFAULT_WHISPER_MODEL;
   const localTimeoutMs = Math.max(
     60000,
-    parseInt(process.env.LOCAL_TIMEOUT_MS || "1800000", 10) || 1800000
-  ); // Default 30 minutes
+    parseInt(process.env.LOCAL_TIMEOUT_MS || "7200000", 10) || 7200000
+  ); // Default 2 hours for full file processing
 
   // Only create directories that are actually needed (audio files)
   ensureDir(audioDir);
@@ -60,8 +51,6 @@ export function loadConfig(): ServiceConfig {
     port,
     localAsrBaseUrl,
     localAsrModel,
-    localChunkSeconds,
-    localMaxFileMb,
     localTimeoutMs,
   };
 }

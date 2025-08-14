@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     curl \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Create Python virtual environment for ASR service
@@ -84,10 +85,11 @@ COPY --from=python-builder /app/py_asr_service ./py_asr_service
 
 # Copy startup scripts and entrypoint
 COPY scripts/ ./scripts/
-COPY docker-entrypoint.sh ./
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 # Make entrypoint executable
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh && \
+    dos2unix /app/docker-entrypoint.sh || true
 
 # Create directories for audio files and models
 RUN mkdir -p /app/audio_file /app/models
@@ -98,12 +100,13 @@ EXPOSE 5688 5689
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=5688
-ENV GROQ_TIMEOUT_MS=1800000
+ENV GROQ_TIMEOUT_MS=3600000
 ENV LOCAL_ASR_BASE_URL=http://localhost:5689
-ENV LOCAL_ASR_MODEL=base.en
-ENV LOCAL_CHUNK_SECONDS=600
-ENV LOCAL_MAX_FILE_MB=100
-ENV LOCAL_TIMEOUT_MS=1800000
+ENV LOCAL_ASR_MODEL=small.en
+ENV DEFAULT_MODEL=small.en
+ENV LOCAL_CHUNK_SECONDS=90
+ENV LOCAL_MAX_FILE_MB=50
+ENV LOCAL_TIMEOUT_MS=3600000
 ENV DEFAULT_MODEL_TYPE=auto
 
 # Use the entrypoint script
