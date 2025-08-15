@@ -28,8 +28,10 @@ const app = Fastify({
 
 // Add a pre-handler hook for API key authentication
 app.addHook("preHandler", async (request, reply) => {
+    app.log.info(`preHandler received request for: ${request.url}`);
     const syncRoute = request.routeOptions.url === "/v1/sync/transcripts";
     const asyncRoute = request.routeOptions.url === "/v1/async/transcripts";
+    app.log.info(`Route options URL: ${request.routeOptions.url}, syncRoute: ${syncRoute}, asyncRoute: ${asyncRoute}`);
 
     if ((syncRoute || asyncRoute) && cfg.apiKey) {
     const apiKey = request.headers["x-api-key"];
@@ -175,8 +177,13 @@ app.post("/v1/sync/transcripts", async (req, reply) => {
     }
 });
 
+app.get("/v1/test", async (req, reply) => {
+    reply.send({ ok: true });
+});
+
 // Asynchronous endpoint for creating a transcription job
 app.post("/v1/async/transcripts", async (req, reply) => {
+    app.log.info("Handling POST /v1/async/transcripts");
     const q = req.query as any;
     const modelParam = q?.model as string | undefined;
     const langParam = q?.language as string | undefined;
