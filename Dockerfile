@@ -1,110 +1,64 @@
-# Build stage for Node.js
-FROM node:22-alpine AS node-builder
-
-# Set working directory
+##############################
+# Build stage
+##############################
+FROM node:22-slim AS build
+## Install build-time tools required by some dependencies (yt-dlp needs python)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python-is-python3 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
-# Copy package files
+# Dependency manifests first
 COPY package*.json ./
 
-# Install only Node.js dependencies (no Python setup)
-RUN npm ci --ignore-scripts
+# Install all deps (need dev deps for TypeScript build & postinstall scripts)
+RUN npm ci
 
-# Copy source code
+# Copy source
 COPY . .
 
-# Build the TypeScript project
+# Normalize line endings for shell scripts (Windows -> Unix)
+RUN find . -type f -name "*.sh" -exec sed -i 's/\r$//' {} + || true
+
+# Build TS
 RUN npm run build
 
-# Python ASR service stage
-FROM python:3.10-slim AS python-builder
-
-# Set working directory for Python service
-WORKDIR /app/py_asr_service
-
-# Install system dependencies for faster-whisper
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy Python requirements
-COPY py_asr_service/requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy Python service code
-COPY py_asr_service/ .
-
+##############################
 # Production stage
+##############################
 FROM node:22-slim AS production
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    python3-venv \
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libswresample-dev \
-    build-essential \
-    pkg-config \
     curl \
+    python3 \
+    python-is-python3 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create Python virtual environment for ASR service
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy Python requirements from python-builder
-COPY --from=python-builder /app/py_asr_service/requirements.txt /tmp/
-
-# Install Python dependencies for ASR service in virtual environment
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
-
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy manifests & install only production deps (omit dev)
 COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Install only production dependencies
-RUN npm ci --only=production && npm cache clean --force
-
-# Copy built Node.js application
-COPY --from=node-builder /app/dist ./dist
-
-# Copy Python ASR service
-COPY --from=python-builder /app/py_asr_service ./py_asr_service
-
-# Copy startup scripts and entrypoint
-COPY scripts/ ./scripts/
+# Copy build output and entrypoint
+COPY --from=build /app/dist ./dist
 COPY docker-entrypoint.sh ./
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /app/audio_file
 
-# Make entrypoint executable
-RUN chmod +x /app/docker-entrypoint.sh
+# Create non-root user
+RUN adduser --system --group --uid 1001 appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 
-# Create directories for audio files and models
-RUN mkdir -p /app/audio_file /app/models
+ENV NODE_ENV=production \
+    PORT=5687
 
-# Expose ports for both services
-EXPOSE 5685 5686
+EXPOSE 5687
 
-# Set environment variables
-ENV NODE_ENV=production
-ENV PORT=5685
-ENV GROQ_TIMEOUT_MS=1800000
-ENV LOCAL_ASR_BASE_URL=http://localhost:5686
-ENV LOCAL_ASR_MODEL=base.en
-ENV LOCAL_CHUNK_SECONDS=600
-ENV LOCAL_MAX_FILE_MB=100
-ENV LOCAL_TIMEOUT_MS=1800000
-ENV DEFAULT_MODEL_TYPE=auto
-
-# Use the entrypoint script
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

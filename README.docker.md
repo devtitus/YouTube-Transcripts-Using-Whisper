@@ -1,12 +1,17 @@
 # Docker Deployment Guide
 
-This guide provides detailed instructions for deploying the YouTube Transcription Service using a simple and efficient single-container setup with Docker.
+This guide provides detailed instructions for deploying the YouTube Transcription Service using Docker.
 
 ## 🚀 Deployment Overview
 
-The service is designed to be easy to run using Docker Compose. The setup uses a single container that intelligently runs both the main Node.js API and the Python transcription service, making it resource-efficient and simple to manage.
+The service is deployed as a multi-container application using Docker Compose, consisting of three main services:
+- **`transcripts-service`**: The main Node.js API server that accepts requests.
+- **`worker`**: A background worker that processes transcription jobs from the queue.
+- **`redis`**: The Redis server that powers the job queue and stores results.
 
---- 
+This setup allows for scalable, non-blocking job processing, making it highly efficient for handling long-running transcription tasks.
+
+---
 
 ## 🏁 Quick Start
 
@@ -14,41 +19,38 @@ Follow these steps to get the service running with Docker.
 
 ### 1. **Set Up the Environment**
 
-First, create a `.env` file from the Docker environment template. This file will store your API key.
+First, create a `.env` file from the Docker environment template. This file will store your API keys.
 
 ```bash
 # Copy the template to a new .env file
 cp .env.docker .env
 ```
 
-Next, open the `.env` file in a text editor and add your Groq API key.
+Next, open the `.env` file in a text editor and add your Groq API key. You can also set an optional API key to secure your service endpoint.
 
 ```env
 # .env
+# Required: Get an API key from https://console.groq.com/keys
 GROQ_API_KEY=your_groq_api_key_here
+
+# Optional: Set a key to secure your service endpoint
+# API_KEY=a_secret_key_for_your_service
+
+# Optional: For async job completion webhooks
+# WEBHOOK_URL=https://your-app.com/webhook-receiver
 ```
 
-> **Note:** If you leave `GROQ_API_KEY` blank, the service will automatically run in **local-only mode**, using the private, on-device transcription engine.
+> **Note:** `GROQ_API_KEY` is **required** for the service to function. `WEBHOOK_URL` is optional and used for asynchronous job notifications.
 
-### 2. **Build the Application**
+### 2. **Start the Service**
 
-Before starting the Docker container, you need to build the TypeScript application. This compiles the code into JavaScript that can be run by Node.js.
-
-```bash
-# This command compiles the src/ directory into dist/
-npm run build
-```
-
-### 3. **Start the Service**
-
-With Docker running, start the service using Docker Compose:
+With Docker running, start the service using Docker Compose. This single command will build the image and start the container.
 
 ```bash
-# This command builds the image and starts the service in the background.
 docker-compose up --build -d
 ```
 
-### 4. **Check the Logs**
+### 3. **Check the Logs**
 
 To see the logs and ensure everything is running correctly, use the `docker-compose logs` command.
 
@@ -56,87 +58,78 @@ To see the logs and ensure everything is running correctly, use the `docker-comp
 docker-compose logs -f
 ```
 
-### 5. **Test the API**
+### 4. **Test the API**
 
-Once the service is running, you can test the API. The service will be available at `http://localhost:5685`.
+Once the service is running, you can test the API, which will be available at `http://localhost:5687`.
 
 ```bash
-# Test the local model
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&model_type=local&sync=true"
-
-# Test the cloud model (if you added a Groq API key)
-curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&model_type=cloud&sync=true"
+# Send a request to the synchronous transcription endpoint
+curl -X POST "http://localhost:5687/v1/sync/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
---- 
+For asynchronous jobs, see the [main README file's API documentation](../README.md#asynchronous-api).
+
+---
 
 ## 🏗️ Architecture Overview
 
-The Docker setup consists of two main components running inside a single container:
+The `docker-compose.yml` file defines three services:
 
-- **Node.js API (Port `5685`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service.
-- **Python ASR Service (Port `5686`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions.
-- **Redis (Port `6381`)**: A separate container that is used for rate limiting to ensure you don’t exceed the Groq API quotas.
-
-An entrypoint script (`docker-entrypoint.sh`) manages starting both the Python and Node.js services in the correct order.
+1.  **`transcripts-service`**: The main Node.js API server. It receives all HTTP requests, and for asynchronous jobs, it adds them to the Redis queue before returning a `jobId` to the client.
+2.  **`worker`**: A background Node.js process that listens for jobs on the Redis queue. It executes the transcription tasks (download, convert, transcribe) and stores the results back in Redis.
+3.  **`redis`**: A Redis container that serves as the message broker for the job queue. It also stores the results of completed jobs.
 
 ## 📦 Volumes
 
-Docker volumes are used to persist data and cache models, which is crucial for efficiency.
+Two Docker volumes are used to persist data:
 
-- `audio_data`: A temporary storage location for audio files during processing.
-- `models_data`: Stores the downloaded `faster-whisper` models so they don't need to be re-downloaded every time the container starts.
-- `huggingface_cache`: A cache for models downloaded from Hugging Face.
-- `redis_data`: Persists Redis data, so rate-limiting information is not lost on restart.
+- `audio_data`: A temporary storage location for audio files shared between the API and worker services.
+- `redis_data`: Persists Redis data, ensuring that the job queue and results are not lost if the Redis container restarts.
 
-To clear all cached data, including models, you can run `docker-compose down -v`.
+To clear all volumes, you can run `docker-compose down -v`.
 
 ## ⚙️ Environment Variables
 
 You can customize the service's behavior by setting environment variables in your `.env` file.
 
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `GROQ_API_KEY` | `(none)` | **Required for cloud mode.** Your API key from Groq. |
-| `DEFAULT_MODEL_TYPE` | `auto` | The default transcription mode: `local`, `cloud`, or `auto`. |
-| `LOCAL_ASR_MODEL` | `base.en` | The default model to use for the local service. |
-| `LOCAL_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for local service. |
-| `LOCAL_MAX_FILE_MB` | `100` | File size threshold in MB for triggering chunking (local service). |
-| `LOCAL_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for local transcription (30 minutes). |
-| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service. |
-| `GROQ_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds for cloud service. |
-| `GROQ_MAX_REQUEST_MB` | `15` | File size threshold in MB for chunking (cloud service). |
-| `GROQ_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for Groq transcription (30 minutes). |
+| Variable              | Default                  | Description                                                  |
+| :-------------------- | :----------------------- | :----------------------------------------------------------- |
+| `GROQ_API_KEY`        | `(none)`                 | **Required.** Your API key from Groq.                        |
+| `API_KEY`             | `(none)`                 | An optional secret key to protect the API endpoint.          |
+| `WEBHOOK_URL`         | `(none)`                 | An optional URL to send a POST request to on job completion. |
+| `REDIS_HOST`          | `redis`                  | The hostname of the Redis service (for Docker Compose).      |
+| `REDIS_PORT`          | `6382`                   | The port that the Redis service is exposed on.               |
+| `GROQ_WHISPER_MODEL`  | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service.         |
+| `GROQ_CHUNK_SECONDS`  | `600`                    | Duration of each audio chunk in seconds.                     |
+| `GROQ_MAX_REQUEST_MB` | `15`                     | File size threshold in MB for triggering chunking.           |
+| `GROQ_TIMEOUT_MS`     | `1800000`                | Request timeout in milliseconds for Groq transcription.      |
 
 ## 🛠️ Useful Docker Commands
 
 Here are some common commands for managing your Docker deployment:
 
 ```bash
-# Start services in the background
+# Start the service in the background
 docker-compose up -d
 
-# View real-time logs from all services
+# View real-time logs
 docker-compose logs -f
 
-# Stop all running services
+# Stop the service
 docker-compose down
 
-# Rebuild the image and restart the services
+# Rebuild the image and restart the service
 docker-compose up --build -d
 
-# Stop services and remove all associated volumes (clears caches)
+# Stop the service and remove the audio volume
 docker-compose down -v
 
-# Check the status and health of your running containers
+# Check the status of the running container
 docker-compose ps
 ```
 
 ## 🩺 Health Checks
 
-The service has health check endpoints to ensure it is running correctly.
+The service has a health check endpoint to ensure it is running correctly. Docker Compose automatically uses this to monitor the container's status.
 
-- **Node.js API:** `curl http://localhost:5685/healthz`
-- **Python ASR Service:** `curl http://localhost:5686/healthz`
-
-Docker Compose automatically uses these health checks to monitor the container status.
+- **Node.js API:** `curl http://localhost:5687/healthz`
