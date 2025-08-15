@@ -14,24 +14,24 @@ The entire process runs on your own machine, using the `faster-whisper` library 
 
 Here’s a simple breakdown of what happens when you ask the service to transcribe a YouTube video:
 
-1.  **You Make a Request:** You send a request to the service's API with the YouTube URL you want to transcribe.
+1.  **You Make a Request:** You send a request to the service's API with the YouTube URL and any options, like enabling chunking for faster processing.
 
-2.  **Download the Audio:** The service uses a tool called `yt-dlp` to download just the audio from the YouTube video. It saves this audio into a temporary, job-specific directory.
+2.  **Download and Optimize Audio:** The service uses `yt-dlp` and `ffmpeg` in a single step to download the audio and convert it directly to an **optimized `16kHz mono MP3` file**. This is much more efficient than creating a large, uncompressed WAV file.
 
-3.  **Convert the Audio:** The downloaded audio needs to be in a specific format that the transcription models can understand. The service uses a powerful tool called `ffmpeg` to convert the audio into a **16kHz mono WAV file**. This is a standard, high-quality format for speech recognition.
+3.  **Choose a Transcription Strategy:**
+    - **If Chunking is Enabled:** For very long videos, you can enable chunking. The service will use `ffmpeg` to split the audio into smaller, overlapping chunks. This allows for faster, parallel processing.
+    - **If Chunking is Disabled:** The service will process the entire audio file in one go. This is ideal for shorter videos and can offer the best accuracy.
 
-4.  **Chunk the Audio (If Necessary):** Large audio files can be too big for the transcription model to handle in one go. To solve this, the service automatically checks the file size and, if it exceeds a certain limit, it splits the audio into smaller, sequential chunks using `ffmpeg`. This makes the transcription process much more reliable for long videos.
+4.  **Transcribe the Audio:** This is the main event. The optimized MP3 file (or its chunks) is sent to the local Python server, which uses `faster-whisper` to perform the transcription. The service also uses a Voice Activity Detection (VAD) filter to skip silent parts of the audio, speeding up the process significantly.
 
-5.  **Transcribe the Audio:** This is the main event. The clean WAV audio file (or its chunks) is sent to the local Python server, which uses `faster-whisper` (an optimized version of Whisper) to transcribe the audio. This runs entirely on your own machine. The service also uses a Voice Activity Detection (VAD) filter to skip silent parts of the audio, speeding up the process.
-
-6.  **Merge and Format the Transcript:** If the audio was split into chunks, the service intelligently merges the transcribed text from each chunk back together, adjusting the timestamps to be seamless. The final transcript is then formatted into several standard formats:
+5.  **Merge and Format the Transcript:** If the audio was chunked, the service intelligently merges the transcribed text from all chunks back together, ensuring the timestamps are seamless and accurate. The final transcript is then formatted into several standard formats:
     - **`JSON`:** A structured format that's easy for other programs to read.
     - **`SRT` & `VTT`:** Standard subtitle formats that can be used with video players.
     - **`TXT`:** A plain text file with just the transcribed text.
 
-7.  **Get the Result:** The final, formatted transcript is sent back to you in the API response.
+6.  **Get the Result:** The final, formatted transcript is sent back to you in the API response.
 
-8.  **Clean Up:** After the transcription is complete, the service automatically deletes the temporary directory containing all audio files and chunks to save space.
+7.  **Clean Up:** After the transcription is complete, the service automatically deletes the temporary directory containing the MP3 file and any audio chunks to save space.
 
 --- 
 

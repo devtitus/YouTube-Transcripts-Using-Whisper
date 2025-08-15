@@ -1,6 +1,12 @@
 /node_modules
 /dist
-/.env
+
+# Environment variables
+# Ignore all .env files
+.env*
+# Except for the example and docker config
+!.env.example
+!.env.docker
 
 # Python
 py_asr_service/venv/

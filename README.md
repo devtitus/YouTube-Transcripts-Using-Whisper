@@ -6,7 +6,7 @@ This project is a powerful, private, and easy-to-use service that automatically 
 
 - **💻 Private & Local-Only:** Runs a private, on-device transcription service using `faster-whisper` for 100% offline use and data privacy.
 - **🚀 High Performance:** Uses an optimized version of Whisper and includes Voice Activity Detection (VAD) to quickly process audio by skipping silent segments.
-- **Smart Chunking:** Automatically splits large audio files into smaller chunks to improve reliability for long videos.
+- **🚀 Smart Chunking:** For long videos, enable chunking to process audio in parallel for faster transcriptions.
 - **Easy Deployment:** Get started in minutes with Docker Compose.
 - **Multiple Output Formats:** Get your transcripts in `JSON`, `SRT`, `VTT`, or plain `TXT`.
 - **Flexible API:** Submit transcription jobs via query parameters or a JSON body.
@@ -81,11 +81,15 @@ You can provide the YouTube URL and options in two ways:
 
 ### Parameters
 
-| Parameter             | Location     | Description                                       | Example                           |
-| :-------------------- | :----------- | :------------------------------------------------ | :-------------------------------- |
-| `youtubeUrl` or `url` | Body / Query | **Required.** The URL of the YouTube video.       | `https://youtube.com/watch?v=...` |
-| `model`               | Body / Query | The specific `faster-whisper` model to use.       | `small.en`                        |
-| `language`            | Body / Query | A hint for the audio language (e.g., "en", "es"). | `en`                              |
+| Parameter                | Location     | Description                                                                 | Example                           |
+| :----------------------- | :----------- | :-------------------------------------------------------------------------- | :-------------------------------- |
+| `youtubeUrl` or `url`    | Body / Query | **Required.** The URL of the YouTube video.                                 | `https://youtube.com/watch?v=...` |
+| `model`                  | Body / Query | The `faster-whisper` model to use.                                          | `small.en`                        |
+| `language`               | Body / Query | A hint for the audio language (e.g., "en", "es").                           | `en`                              |
+| `task`                   | Body / Query | Set to `translate` to translate the audio to English.                       | `translate`                       |
+| `enableChunking`         | Body / Query | Set to `true` to enable chunking for faster processing of long videos.      | `true`                            |
+| `chunkDurationSeconds`   | Body / Query | The duration of each audio chunk in seconds. (Default: `120`)               | `180`                             |
+| `overlapSeconds`         | Body / Query | The overlap between consecutive chunks in seconds. (Default: `10`)          | `15`                              |
 
 ### Available Models
 

@@ -41,31 +41,6 @@ export async function downloadOptimizedAudioForJob(
   return { audioPath: outPath };
 }
 
-// Legacy function - kept for backward compatibility
-export async function downloadAudioForJob(
-  jobId: string,
-  youtubeUrl: string,
-  outBaseDir: string
-): Promise<{ audioPath: string }> {
-  // LEGACY: Downloads in original format, requires conversion
-  const outPath = path.join(outBaseDir, `audio.%(ext)s`);
-
-  await ytdlp(youtubeUrl, {
-    format: "bestaudio/best",
-    output: outPath,
-    noProgress: true,
-    ffmpegLocation: cfg.ffmpegCmd,
-  });
-
-  const files = fs
-    .readdirSync(outBaseDir)
-    .filter((f) => f.startsWith(`audio.`));
-  if (files.length === 0) {
-    throw new Error("yt-dlp did not produce an audio file");
-  }
-  const audioPath = path.join(outBaseDir, files[0]);
-  return { audioPath };
-}
 
 export async function fetchVideoDurationSeconds(
   youtubeUrl: string
