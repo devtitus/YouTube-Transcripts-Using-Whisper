@@ -25,7 +25,7 @@ npm run cleanup
 - `src/`: TypeScript backend
   - `pipeline/`: Transcription processing workflow
   - `limits/`: Rate limiting for the Groq API
-- `audio_file/`: Default output directory for temporary audio
+- `audio_file/`: Default output directory for temporary audio (created at runtime, ignored by .gitignore)
 - `scripts/`: Helper scripts
 
 ## Style Guide

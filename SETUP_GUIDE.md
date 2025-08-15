@@ -41,22 +41,17 @@ Create a `.env` file in the project root by copying the example file:
 cp .env.example .env
 ```
 
-Now, open the `.env` file and add your Groq API key.
+Now, open the `.env` file and add your Groq API key. The most important variables are listed below.
 
-```env
-# .env file
-
-# Get an API key from https://console.groq.com/keys
-GROQ_API_KEY=your_groq_api_key_here
-
-# (Optional) Set a key to secure your service endpoint
-# API_KEY=a_secret_key_for_your_service
-
-# Server port
-PORT=5687
-```
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `GROQ_API_KEY` | `(none)` | **Required.** Your API key from Groq. |
+| `API_KEY` | `(none)` | An optional secret key to protect the API endpoint. |
+| `PORT` | `5687` | The port for the server. |
+| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model for the Groq cloud service. |
 
 - The `GROQ_API_KEY` is required for the service to work.
+- For a full list of configurable variables, see the `.env.example` file.
 
 ---
 

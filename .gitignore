@@ -1,10 +1,10 @@
+# Node.js
 /node_modules
 /dist
 /.env
 
-# Python
-py_asr_service/venv/
-py_asr_service/__pycache__/
-py_asr_service/*.pyc
-py_asr_service/.pytest_cache/
-py_asr_service/models/
+# Temporary Files
+/audio_file/
+
+# Crush
+/.crush/

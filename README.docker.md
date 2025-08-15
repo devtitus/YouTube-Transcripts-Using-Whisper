@@ -84,14 +84,17 @@ To clear this volume, you can run `docker-compose down -v`.
 
 You can customize the service's behavior by setting environment variables in your `.env` file.
 
-| Variable              | Default                  | Description                                             |
-| :-------------------- | :----------------------- | :------------------------------------------------------ |
-| `GROQ_API_KEY`        | `(none)`                 | **Required.** Your API key from Groq.                   |
-| `API_KEY`             | `(none)`                 | An optional secret key to protect the API endpoint.     |
-| `GROQ_WHISPER_MODEL`  | `whisper-large-v3-turbo` | The default model to use for the Groq cloud service.    |
-| `GROQ_CHUNK_SECONDS`  | `600`                    | Duration of each audio chunk in seconds.                |
-| `GROQ_MAX_REQUEST_MB` | `15`                     | File size threshold in MB for triggering chunking.      |
-| `GROQ_TIMEOUT_MS`     | `1800000`                | Request timeout in milliseconds for Groq transcription. |
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `GROQ_API_KEY` | `(none)` | **Required.** Your API key from Groq. |
+| `API_KEY` | `(none)` | An optional secret key to protect the API endpoint. |
+| `GROQ_WHISPER_MODEL` | `whisper-large-v3-turbo` | The default model for the Groq cloud service. |
+| `GROQ_BASE_URL` | `https://api.groq.com/openai/v1` | The base URL for the Groq API. |
+| `GROQ_CHUNK_SECONDS` | `600` | Duration of each audio chunk in seconds. |
+| `GROQ_MAX_REQUEST_MB` | `15` | File size threshold in MB for triggering chunking. |
+| `GROQ_TIMEOUT_MS` | `1800000` | Request timeout in milliseconds for Groq transcription. |
+| `GROQ_AUDIO_CODEC` | `aac` | The audio codec for processing. |
+| `GROQ_AUDIO_BITRATE_KBPS` | `32` | The audio bitrate in KBPS. |
 
 ## 🛠️ Useful Docker Commands
 
