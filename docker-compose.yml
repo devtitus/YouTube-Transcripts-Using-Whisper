@@ -7,6 +7,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5687
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6382}
+      - WEBHOOK_URL=${WEBHOOK_URL}
       
       # Groq Cloud Configuration
       - GROQ_API_KEY=${GROQ_API_KEY}
@@ -21,6 +24,8 @@ services:
     volumes:
       - audio_data:/app/audio_file
     restart: unless-stopped
+    depends_on:
+      - redis
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5687/healthz"]
       interval: 30s
@@ -28,6 +33,33 @@ services:
       retries: 3
       start_period: 60s
 
+  worker:
+    build: .
+    container_name: transcripts-worker
+    command: npm run start:worker
+    environment:
+      - NODE_ENV=production
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6382}
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    volumes:
+      - audio_data:/app/audio_file
+    restart: unless-stopped
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: redis
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
 volumes:
   audio_data:
+    driver: local
+  redis_data:
     driver: local

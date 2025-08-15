@@ -18,6 +18,13 @@ export interface ServiceConfig {
   groqChunkSeconds: number; // e.g., 600 (10 minutes)
   groqMaxRequestMb: number; // when larger than this, chunk
   groqTimeoutMs: number; // timeout for groq transcription requests
+
+  // Redis
+  redisHost: string;
+  redisPort: number;
+
+  // Webhook
+  webhookUrl?: string;
 }
 
 function ensureDir(dir: string) {
@@ -46,8 +53,12 @@ export function loadConfig(): ServiceConfig {
   const groqMaxRequestMb = Math.max(5, parseInt(process.env.GROQ_MAX_REQUEST_MB || "15", 10) || 15);
   const groqTimeoutMs = Math.max(60000, parseInt(process.env.GROQ_TIMEOUT_MS || "1800000", 10) || 1800000); // Default 30 minutes
   
+  const redisHost = process.env.REDIS_HOST || 'localhost';
+  const redisPort = parseInt(process.env.REDIS_PORT || '6382', 10);
+  const webhookUrl = process.env.WEBHOOK_URL || undefined;
+
   // Only create directories that are actually needed (audio files)
   ensureDir(audioDir);
 
-  return { apiKey, audioDir, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb, groqTimeoutMs };
+  return { apiKey, audioDir, ffmpegCmd, ytdlpCmd, port, groqApiKey, groqBaseUrl, groqWhisperModel, groqAudioCodec, groqAudioBitrateKbps, groqChunkSeconds, groqMaxRequestMb, groqTimeoutMs, redisHost, redisPort, webhookUrl };
 }

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "worker": "tsx watch src/async/worker.ts",
     "start": "node dist/server.js",
+    "start:worker": "node dist/async/worker.js",
     "build": "tsc -p tsconfig.json",
     "cleanup": "node scripts/cleanup-temp-files.js",
     "setup": "npm install",
@@ -19,6 +21,8 @@
     "fastify": "^4.28.1",
     "ffmpeg-static": "^5.2.0",
     "pino": "^9.3.2",
+    "bullmq": "^5.9.0",
+    "ioredis": "^5.4.1",
     "undici": "^6.19.8",
     "yt-dlp-exec": "^1.0.2",
     "zod": "^3.23.8"

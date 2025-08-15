@@ -5,8 +5,9 @@ This project is a powerful and efficient service that automatically generates tr
 ## ✨ Features
 
 - **☁️ Cloud-Powered (Groq):** Uses the [Groq API](https://groq.com/) for incredibly fast and accurate transcription with OpenAI's Whisper models.
+- **⚡️ Synchronous & Asynchronous API:** Choose between a simple, blocking API for quick tasks or a non-blocking API for long videos, complete with job tracking and webhooks.
 - **Smart Chunking:** Automatically splits large audio files into smaller chunks to meet API limits and improve reliability.
-- **Easy Deployment:** Get started in minutes with Docker Compose.
+- **Easy Deployment:** Get started in minutes with Docker Compose, including a Redis-backed job queue.
 - **Multiple Output Formats:** Get your transcripts in `JSON`, `SRT`, `VTT`, or plain `TXT`.
 - **Smart Rate Limiting:** Automatically manages API usage to prevent hitting Groq's rate limits.
 - **Flexible API:** Submit transcription jobs via query parameters or a JSON body.
@@ -30,9 +31,12 @@ Next, open the `.env` file in a text editor and add your Groq API key. You can g
 ```env
 # .env
 GROQ_API_KEY=your_groq_api_key_here
+
+# Optional: For async job completion webhooks
+# WEBHOOK_URL=https://your-app.com/webhook-receiver
 ```
 
-> **Note:** The `GROQ_API_KEY` is **required** for the service to operate.
+> **Note:** The `GROQ_API_KEY` is **required** for the service to operate. The `WEBHOOK_URL` is optional and is used by the asynchronous processing mode.
 
 ### 2. **Build and Run the Service**
 
@@ -47,22 +51,24 @@ The service is now running! The main API is available at `http://localhost:5687`
 
 ### 3. **Test the API**
 
-You can test the service by sending a `curl` request. Here’s how to transcribe a video:
+You can test the service by sending a `curl` request. Here’s how to transcribe a video using the synchronous endpoint:
 
 ```bash
-# Example: Transcribe a video
-curl "http://localhost:5687/v1/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+# Example: Transcribe a video synchronously
+curl -X POST "http://localhost:5687/v1/sync/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
-You should see a JSON response containing the full transcript.
+You should see a JSON response containing the full transcript. See the [Asynchronous API](#-asynchronous-api) section for non-blocking requests.
 
 ## ⚙️ API Usage
 
-You can create a new transcription job by sending a `POST` request to the `/v1/transcripts` endpoint.
+The service provides two modes for transcription: **Synchronous** for immediate results and **Asynchronous** for long-running jobs.
 
-### Request Endpoint
+### Synchronous API (Simple & Blocking)
 
-`POST /v1/transcripts`
+This mode is best for shorter videos or when you need the transcript in a single request-response cycle.
+
+**Request Endpoint:** `POST /v1/sync/transcripts`
 
 ### How to Provide Input
 
@@ -98,6 +104,82 @@ You can provide the YouTube URL and options in two ways:
 ### Available Models
 
 - **Cloud (Groq):** `whisper-large-v3-turbo` (default), `whisper-large-v3`, `distil-whisper-large-v3-en`
+
+### Asynchronous API (Scalable & Non-Blocking)
+
+This mode is ideal for long videos. It immediately accepts the job, returns a job ID, and processes the transcription in the background. You can check the status using the job ID and optionally receive a webhook upon completion.
+
+#### 1. Create a Transcription Job
+
+Send a request to this endpoint to create a new job. The server will validate the request and add it to the processing queue.
+
+**Request Endpoint:** `POST /v1/async/transcripts`
+
+**Example Request:**
+```bash
+curl -X POST http://localhost:5687/v1/async/transcripts \
+  -H "Content-Type: application/json" \
+  -d '{
+    "youtubeUrl": "https://www.youtube.com/watch?v=your_video_id"
+  }'
+```
+
+**Example Response (202 Accepted):**
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "message": "Job accepted for processing.",
+  "statusUrl": "http://localhost:5687/v1/async/transcripts/status/a1b2c3d4-e5f6-7890-1234-567890abcdef"
+}
+```
+
+#### 2. Check Job Status
+
+Use the `jobId` from the previous step to poll the status of your transcription job.
+
+**Request Endpoint:** `GET /v1/async/transcripts/status/:jobId`
+
+**Example Request:**
+```bash
+curl http://localhost:5687/v1/async/transcripts/status/a1b2c3d4-e5f6-7890-1234-567890abcdef
+```
+
+**Example Response (Completed):**
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "state": "completed",
+  "progress": null,
+  "result": {
+    "text": "This is the full transcript...",
+    "segments": [...]
+  },
+  "error": null,
+  "timestamp": "2023-10-27T10:00:00.000Z"
+}
+```
+
+**Job States:**
+- `waiting`: The job is in the queue waiting to be processed.
+- `active`: The job is currently being processed by a worker.
+- `completed`: The job finished successfully. The `result` field will contain the transcript.
+- `failed`: The job failed. The `error` field will contain the error message.
+
+#### 3. Receive Webhook (Optional)
+
+If you configure a `WEBHOOK_URL` in your `.env` file, the service will send a `POST` request to that URL with the final job details upon completion or failure.
+
+**Example Webhook Payload:**
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-1234-567890abcdef",
+  "status": "completed",
+  "result": {
+    "text": "This is the full transcript...",
+    "segments": [...]
+  }
+}
+```
 
 ## 🐳 Docker Deployment
 
