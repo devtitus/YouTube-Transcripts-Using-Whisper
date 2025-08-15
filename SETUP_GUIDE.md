@@ -1,6 +1,6 @@
 # Local Development Setup Guide
 
-This guide will walk you through setting up and running the YouTube Transcription Service on your local machine **without using Docker**. This method is ideal for contributing to the code.
+This guide will walk you through setting up and running the YouTube Transcription Service on your local machine **without using Docker**. This method is ideal if you want to have more direct control over the environment or contribute to the code.
 
 ## ✅ Prerequisites
 
@@ -8,10 +8,10 @@ Before you begin, make sure you have the following software installed on your sy
 
 - **[Node.js](https://nodejs.org/)**: Version 18 or later.
 - **[npm](https://www.npmjs.com/)**: Included with Node.js.
+- **[Python](https://www.python.org/downloads/)**: Version 3.8 or later.
 - **[ffmpeg](https://ffmpeg.org/download.html)**: A tool for audio conversion. It must be installed and accessible in your system's PATH.
-- **[Redis](https://redis.io/docs/getting-started/)**: A Redis server is required for the asynchronous job queue. You can install it locally or run it via Docker.
 
-> **Tip:** To check if `ffmpeg` is installed correctly, open a terminal and run `ffmpeg -version`.
+> **Tip:** To check if `ffmpeg` is installed correctly, open a terminal and run `ffmpeg -version`. If it shows the version number, you're good to go.
 
 ---
 
@@ -34,7 +34,21 @@ Install all the required Node.js packages using npm:
 npm install
 ```
 
-### 3. **Configure Environment Variables**
+### 3. **Set Up the Python Environment**
+
+The project uses a Python script to automatically set up a virtual environment for the local transcription service. This keeps its dependencies isolated from your system.
+
+Run the following command from the project root:
+
+```bash
+node scripts/setup-python.js
+```
+
+This script will:
+- Create a `venv` folder inside `py_asr_service`.
+- Install all the necessary Python packages from `requirements.txt`.
+
+### 4. **Configure Environment Variables**
 
 Create a `.env` file in the project root by copying the example file:
 
@@ -42,80 +56,65 @@ Create a `.env` file in the project root by copying the example file:
 cp .env.example .env
 ```
 
-Now, open the `.env` file and add your Groq API key.
+Now, open the `.env` file and configure it:
 
 ```env
 # .env file
 
+# To use the fast cloud-based transcription:
 # Get an API key from https://console.groq.com/keys
 GROQ_API_KEY=your_groq_api_key_here
 
-# (Optional) Set a key to secure your service endpoint
-# API_KEY=a_secret_key_for_your_service
+# To use the private, local-only transcription:
+# Leave GROQ_API_KEY blank.
+
+# You can also set the default model type ("auto", "cloud", or "local")
+DEFAULT_MODEL_TYPE=auto
 
 # Server port
-PORT=5687
-
-# Redis connection for the job queue
-REDIS_HOST=localhost
-REDIS_PORT=6382
-
-# (Optional) Webhook URL for async job completion
-# WEBHOOK_URL=
+PORT=5685
 ```
 
-- The `GROQ_API_KEY` is required for the service to work.
-- `REDIS_HOST` and `REDIS_PORT` are required for the asynchronous features.
+- **For Cloud Mode:** Fill in your `GROQ_API_KEY`.
+- **For Local-Only Mode:** Leave `GROQ_API_KEY` empty.
+
+### 5. **Build the TypeScript Code**
+
+Before running the server, you need to compile the TypeScript code to JavaScript:
+
+```bash
+npm run build
+```
 
 ---
 
+
 ## ▶️ Running the Service
 
-To run the full service locally, you need to run **two separate processes** in two different terminals: the API server and the Worker.
-
-### Terminal 1: Start the API Server
+Now you are ready to start the service. The project uses `concurrently` to run both the Node.js API and the Python transcription server at the same time.
 
 ```bash
 npm run dev
 ```
 
-This command starts the **Node.js Fastify server** on port `5687`. This server handles all incoming API requests (both synchronous and asynchronous).
+This command will:
+1.  Start the **Python FastAPI server** for local transcriptions on port `5686`.
+2.  Start the **Node.js Fastify server** for the main API on port `5685`.
 
-### Terminal 2: Start the Worker
-
-```bash
-npm run worker
-```
-
-This command starts the **background worker**. This process listens to the Redis queue for new transcription jobs and executes them. Without the worker running, asynchronous jobs will be created but will never be processed.
+The service is now running in development mode with hot-reloading, so any changes you make to the code will automatically restart the server.
 
 ## 🧪 How to Use the Service
 
-Once both the server and worker are running, you can send requests to the API.
+Once the service is running, you can send `POST` requests to the `/v1/transcripts` endpoint.
 
-### Example Synchronous Request (using curl)
+### Example Request (using curl)
 
-This is the simplest way to get a transcript. The request will block until the transcript is ready.
+Here is an example of how to transcribe a video and get the result immediately:
 
 ```bash
-curl -X POST "http://localhost:5687/v1/sync/transcripts?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+curl -X POST -H "Content-Type: application/json" \
+-d '{"youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
+http://localhost:5685/v1/transcripts
 ```
 
-### Example Asynchronous Request (using curl)
-
-This is ideal for longer videos.
-
-1.  **Create the job:**
-    ```bash
-    curl -X POST -H "Content-Type: application/json" \
-      -d '{"youtubeUrl": "https://www.youtube.com/watch?v=your_video_id"}' \
-      http://localhost:5687/v1/async/transcripts
-    ```
-    This will return a `jobId`.
-
-2.  **Check the status:**
-    ```bash
-    curl http://localhost:5687/v1/async/transcripts/status/YOUR_JOB_ID
-    ```
-
-If you have set an `API_KEY` in your `.env` file, you must include it in the header of your requests (e.g., `-H "X-API-Key: your_secret_key"`).
+This will use the `auto` mode, which will try the Groq API first (if a key is provided) and fall back to the local service if needed.

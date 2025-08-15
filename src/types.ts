@@ -2,7 +2,8 @@ export interface CreateTranscriptRequest {
   youtubeUrl: string;
   options?: {
     language?: string;
-    model?: string; // e.g., whisper-large-v3-turbo
+    model?: string; // e.g., ggml-base.en.bin, whisper-large-v3-turbo, base.en
+    modelType?: "local" | "cloud" | "auto"; // routing preference
     temperature?: number;
     translateTo?: string; // optional future use
   };

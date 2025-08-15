@@ -1,73 +1,44 @@
-import "dotenv/config";
+import 'dotenv/config';
 import Fastify from "fastify";
 import { z } from "zod";
 import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
+import { fetch } from "undici";
 import { loadConfig } from "./config.js";
-import { Redis } from 'ioredis';
 
 import type { CreateTranscriptRequest, TranscriptJSON } from "./types.js";
-import {
-  downloadAudioForJob,
-  convertToWav16kMono,
-  fetchVideoDurationSeconds,
-} from "./pipeline/download.js";
+import { downloadAudioForJob, convertToWav16kMono, fetchVideoDurationSeconds } from "./pipeline/download.js";
 import { reserveForGroq, checkDailyExhaustion } from "./limits/rateLimiter.js";
+
 import { transcribeWithGroq } from "./pipeline/transcribe_groq.js";
-import { transcriptionQueue } from "./async/queue.js";
+import { transcribeWithLocal } from "./pipeline/transcribe_local.js";
+// Redis removed since we're synchronous only
 
 const cfg = loadConfig();
-const redis = new Redis(cfg.redisPort, cfg.redisHost);
-const app = Fastify({
+const app = Fastify({ 
   logger: true,
   connectionTimeout: 0, // Disable connection timeout
-  keepAliveTimeout: 0, // Disable keep-alive timeout
-  requestTimeout: 0, // Disable request timeout for long video processing
-});
-
-// Add a pre-handler hook for API key authentication
-app.addHook("preHandler", async (request, reply) => {
-    app.log.info(`preHandler received request for: ${request.url}`);
-    const syncRoute = request.routeOptions.url === "/v1/sync/transcripts";
-    const asyncRoute = request.routeOptions.url === "/v1/async/transcripts";
-    app.log.info(`Route options URL: ${request.routeOptions.url}, syncRoute: ${syncRoute}, asyncRoute: ${asyncRoute}`);
-
-    if ((syncRoute || asyncRoute) && cfg.apiKey) {
-    const apiKey = request.headers["x-api-key"];
-    if (!apiKey || apiKey !== cfg.apiKey) {
-      reply
-        .code(401)
-        .send({ error: "Unauthorized: Invalid or missing API key" });
-    }
-  }
+  keepAliveTimeout: 0,  // Disable keep-alive timeout
+  requestTimeout: 0,    // Disable request timeout for long video processing
 });
 
 const CreateSchema = z.object({
   youtubeUrl: z.string().url(),
-  options: z
-    .object({
-      language: z.string().optional(),
-      model: z.string().optional(),
-      temperature: z.number().optional(),
-      translateTo: z.string().optional(),
-    })
-    .optional(),
+  options: z.object({
+    language: z.string().optional(),
+    model: z.string().optional(),
+    modelType: z.enum(["local", "cloud", "auto"]).optional(),
+    temperature: z.number().optional(),
+    translateTo: z.string().optional(),
+  }).optional(),
 });
 
 function newJobId(): string {
   return crypto.randomUUID();
 }
 
-// Keep the original synchronous processing logic for the sync route
-async function processTranscriptionSync(
-  jobId: string,
-  youtubeUrl: string,
-  opts: { language?: string; model?: string }
-): Promise<TranscriptJSON> {
-  // This function remains largely the same as the original processTranscription
-  // It performs the download, conversion, and transcription in a single blocking operation.
-  // ... implementation details ...
+async function processTranscription(jobId: string, youtubeUrl: string, opts: { language?: string; model?: string; modelType?: "local" | "cloud" | "auto" }): Promise<TranscriptJSON> {
   try {
     const { audioPath } = await downloadAudioForJob(jobId, youtubeUrl);
     // Use temporary directory for processing
@@ -75,33 +46,169 @@ async function processTranscriptionSync(
     fs.mkdirSync(outBaseDir, { recursive: true });
     const wavPath = await convertToWav16kMono(audioPath);
 
-    // Always use Groq (cloud) transcription
-    if (!cfg.groqApiKey) {
-      throw new Error(
-        "Groq transcription requested but GROQ_API_KEY not configured"
-      );
+    // Determine which transcription service to use
+    const modelType = opts.modelType || cfg.defaultModelType;
+    let result;
+    
+    if (modelType === "local") {
+      // Try local first, fallback to cloud if it fails
+      try {
+        app.log.info(`Using local transcription service for job ${jobId}`);
+        result = await transcribeWithLocal({
+          jobId,
+          wavPath,
+          baseDir: outBaseDir,
+          language: opts.language,
+          model: opts.model || cfg.localAsrModel,
+          youtubeUrl,
+        });
+      } catch (localError: any) {
+        app.log.warn(`Local transcription failed for job ${jobId}: ${localError.message}`);
+        
+        // Fallback to cloud service
+        if (cfg.groqApiKey) {
+          try {
+            app.log.info(`Falling back to cloud transcription service for job ${jobId}`);
+            result = await transcribeWithGroq({
+              jobId,
+              wavPath,
+              baseDir: outBaseDir,
+              language: opts.language,
+              model: opts.model || cfg.groqWhisperModel,
+              youtubeUrl,
+            });
+          } catch (cloudError) {
+            app.log.error(`Both local and cloud transcription failed for job ${jobId}`);
+            throw new Error("Unable to transcribe. Both local and cloud services failed.");
+          }
+        } else {
+          app.log.error(`Local transcription failed and no cloud service configured for job ${jobId}`);
+          throw new Error("Unable to transcribe. Local service failed and cloud service not configured.");
+        }
+      }
+    } else if (modelType === "cloud") {
+      // Try cloud first, fallback to local if it fails
+      if (!cfg.groqApiKey) {
+        throw new Error("Cloud transcription requested but GROQ_API_KEY not configured");
+      }
+      
+      try {
+        app.log.info(`Using cloud transcription service for job ${jobId}`);
+        result = await transcribeWithGroq({
+          jobId,
+          wavPath,
+          baseDir: outBaseDir,
+          language: opts.language,
+          model: opts.model || cfg.groqWhisperModel,
+          youtubeUrl,
+        });
+      } catch (cloudError: any) {
+        app.log.warn(`Cloud transcription failed for job ${jobId}: ${cloudError.message}`);
+        
+        // Fallback to local service
+        try {
+          // Check if local service is available
+          const healthCheck = await fetch(`${cfg.localAsrBaseUrl}/healthz`);
+          if (!healthCheck.ok) {
+            throw new Error("Local ASR service is not available");
+          }
+          
+          app.log.info(`Falling back to local transcription service for job ${jobId}`);
+          result = await transcribeWithLocal({
+            jobId,
+            wavPath,
+            baseDir: outBaseDir,
+            language: opts.language,
+            model: opts.model || cfg.localAsrModel,
+            youtubeUrl,
+          });
+        } catch (localError) {
+          app.log.error(`Both cloud and local transcription failed for job ${jobId}`);
+          throw new Error("Unable to transcribe. Both cloud and local services failed.");
+        }
+      }
+    } else { // auto
+      if (cfg.groqApiKey) {
+        try {
+          app.log.info(`Using cloud transcription service (auto mode) for job ${jobId}`);
+          result = await transcribeWithGroq({
+            jobId,
+            wavPath,
+            baseDir: outBaseDir,
+            language: opts.language,
+            model: opts.model || cfg.groqWhisperModel,
+            youtubeUrl,
+          });
+        } catch (cloudError: any) {
+          app.log.warn(`Cloud transcription failed in auto mode for job ${jobId}: ${cloudError.message}`);
+          
+          // Fallback to local service
+          try {
+            const healthCheck = await fetch(`${cfg.localAsrBaseUrl}/healthz`);
+            if (!healthCheck.ok) {
+              throw new Error("Local ASR service is not available");
+            }
+            
+            app.log.info(`Falling back to local transcription service (auto mode) for job ${jobId}`);
+            result = await transcribeWithLocal({
+              jobId,
+              wavPath,
+              baseDir: outBaseDir,
+              language: opts.language,
+              model: opts.model || cfg.localAsrModel,
+              youtubeUrl,
+            });
+          } catch (localError) {
+            app.log.error(`Both cloud and local transcription failed in auto mode for job ${jobId}`);
+            throw new Error("Unable to transcribe. Both cloud and local services failed.");
+          }
+        }
+      } else {
+        // Check if local service is available
+        try {
+          const healthCheck = await fetch(`${cfg.localAsrBaseUrl}/healthz`);
+          if (!healthCheck.ok) {
+            throw new Error("Local ASR service is not available");
+          }
+          
+          app.log.info(`Using local transcription service (auto mode) for job ${jobId}`);
+          result = await transcribeWithLocal({
+            jobId,
+            wavPath,
+            baseDir: outBaseDir,
+            language: opts.language,
+            model: opts.model || cfg.localAsrModel,
+            youtubeUrl,
+          });
+        } catch (localError) {
+          app.log.error(`Local transcription failed in auto mode and no cloud service configured for job ${jobId}`);
+          throw new Error("Unable to transcribe. Local service failed and cloud service not configured.");
+        }
+      }
     }
-
-    app.log.info(`Using cloud transcription service for job ${jobId}`);
-    const result = await transcribeWithGroq({
-      jobId,
-      wavPath,
-      baseDir: outBaseDir,
-      language: opts.language,
-      model: opts.model || cfg.groqWhisperModel,
-      youtubeUrl,
-    });
+    
+    const { outPrefix, jsonPath, srtPath, vttPath, txtPath } = result;
 
     // Read the transcript result
-    const transcriptResult = JSON.parse(
-      fs.readFileSync(result.jsonPath, "utf-8")
-    ) as TranscriptJSON;
+    const transcriptResult = JSON.parse(fs.readFileSync(jsonPath, "utf-8")) as TranscriptJSON;
 
     // Clean up temporary files and directories
     try {
-      if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-      if (fs.existsSync(wavPath)) fs.unlinkSync(wavPath);
-      if (fs.existsSync(outBaseDir)) fs.rmSync(outBaseDir, { recursive: true, force: true });
+      // Remove original audio file and converted wav file
+      if (fs.existsSync(audioPath)) {
+        fs.unlinkSync(audioPath);
+        app.log.info(`Cleaned up audio file: ${audioPath}`);
+      }
+      if (fs.existsSync(wavPath)) {
+        fs.unlinkSync(wavPath);
+        app.log.info(`Cleaned up wav file: ${wavPath}`);
+      }
+      
+      // Remove the entire temporary directory for this job
+      if (fs.existsSync(outBaseDir)) {
+        fs.rmSync(outBaseDir, { recursive: true, force: true });
+        app.log.info(`Cleaned up temp directory: ${outBaseDir}`);
+      }
     } catch (error) {
       app.log.warn(`Cleanup warning: ${error}`);
     }
@@ -109,164 +216,123 @@ async function processTranscriptionSync(
     return transcriptResult;
   } catch (err: any) {
     app.log.error({ err }, "Job failed");
-    // Cleanup on failure
-    const outBaseDir = path.join(cfg.audioDir, `temp_${jobId}`);
-    if (fs.existsSync(outBaseDir)) {
-      fs.rmSync(outBaseDir, { recursive: true, force: true });
+    
+    // Clean up temporary files even on failure
+    try {
+      const outBaseDir = path.join(cfg.audioDir, `temp_${jobId}`);
+      if (fs.existsSync(outBaseDir)) {
+        fs.rmSync(outBaseDir, { recursive: true, force: true });
+        app.log.info(`Cleaned up temp directory after failure: ${outBaseDir}`);
+      }
+    } catch (cleanupError) {
+      app.log.warn(`Cleanup after failure warning: ${cleanupError}`);
     }
+    
     throw err;
   }
 }
 
-// Synchronous endpoint (the original behavior)
-app.post("/v1/sync/transcripts", async (req, reply) => {
-    // This route retains the original implementation of /v1/transcripts
-    // ... implementation details from the original route ...
-    const q = req.query as any;
-    const modelParam = q?.model as string | undefined;
-    const langParam = q?.language as string | undefined;
+app.post("/v1/transcripts", async (req, reply) => {
+  // Support query params: youtubeUrl/url, language, model, model_type
+  const q = req.query as any;
+  const modelParam = q?.model as string | undefined;
+  const modelTypeParam = q?.model_type as "local" | "cloud" | "auto" | undefined;
+  const langParam = q?.language as string | undefined;
 
-    let youtubeUrl: string;
-    let options: { language?: string; model?: string } = {};
+  let youtubeUrl: string;
+  let options: { language?: string; model?: string; modelType?: "local" | "cloud" | "auto" } = {};
+  
+  // Check if we have JSON body or should use query params
+  const hasJsonBody = req.headers["content-type"]?.includes("application/json") && req.body && Object.keys(req.body as any).length > 0;
+  
+  if (hasJsonBody) {
+    const parsed = CreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: parsed.error.issues });
+    }
+    const body = parsed.data as CreateTranscriptRequest;
+    youtubeUrl = body.youtubeUrl;
+    options = {
+      language: body.options?.language || langParam,
+      model: body.options?.model || modelParam,
+      modelType: body.options?.modelType || modelTypeParam
+    };
+  } else {
+    // Use query parameters
+    const url = q?.youtubeUrl || q?.url;
+    if (!url) return reply.code(400).send({ error: "youtubeUrl or url is required" });
+    
+    youtubeUrl = url;
+    options = { 
+      language: langParam, 
+      model: modelParam, 
+      modelType: modelTypeParam 
+    };
+  }
 
-    const hasJsonBody =
-      req.headers["content-type"]?.includes("application/json") &&
-      req.body &&
-      Object.keys(req.body as any).length > 0;
-
-    if (hasJsonBody) {
-      const parsed = CreateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.issues });
+  // Validate model parameter based on model_type
+  if (options.model) {
+    const modelType = options.modelType || cfg.defaultModelType;
+    
+    if (modelType === "local") {
+      // Local models (based on your py_asr_service/models/ folder)
+      const validLocalModels = ["base.en", "small.en", "tiny.en", "large-v3"];
+      if (!validLocalModels.includes(options.model)) {
+        return reply.code(400).send({ 
+          error: `Invalid local model. Must be one of: ${validLocalModels.join(", ")}` 
+        });
       }
-      const body = parsed.data as CreateTranscriptRequest;
-      youtubeUrl = body.youtubeUrl;
-      options = {
-        language: body.options?.language || langParam,
-        model: body.options?.model || modelParam,
-      };
-    } else {
-      const url = q?.youtubeUrl || q?.url;
-      if (!url)
-        return reply.code(400).send({ error: "youtubeUrl or url is required" });
-
-      youtubeUrl = url;
-      options = {
-        language: langParam,
-        model: modelParam,
-      };
-    }
-
-    const id = newJobId();
-    const anticipatedSeconds = await fetchVideoDurationSeconds(youtubeUrl);
-
-    if (cfg.groqApiKey) {
-      const daily = await checkDailyExhaustion(anticipatedSeconds);
-      if (daily.requestsExhausted || daily.audioSecondsExhausted) {
-        return reply.code(429).send({ error: "Daily quota exhausted." });
+    } else if (modelType === "cloud") {
+      // Cloud models (Groq)
+      const validCloudModels = ["distil-whisper-large-v3-en", "whisper-large-v3-turbo", "whisper-large-v3"];
+      if (!validCloudModels.includes(options.model)) {
+        return reply.code(400).send({ 
+          error: `Invalid cloud model. Must be one of: ${validCloudModels.join(", ")}` 
+        });
       }
-      await reserveForGroq(anticipatedSeconds || 0);
     }
+    // For "auto" mode, we accept both local and cloud models
+  }
 
-    try {
-      const result = await processTranscriptionSync(id, youtubeUrl, options);
-      return reply.code(200).send({ id, result });
-    } catch (error: any) {
-      app.log.error({ error, id }, "Transcription failed");
-      return reply.code(500).send({ error: error.message || "Transcription failed" });
+  const id = newJobId();
+
+  // Estimate duration; apply rate limiting if Groq will be used
+  const anticipatedSeconds = await fetchVideoDurationSeconds(youtubeUrl);
+  const willUseGroq = options.modelType === "cloud" || 
+    (options.modelType === "auto" && cfg.groqApiKey) || 
+    (!options.modelType && cfg.defaultModelType === "cloud") ||
+    (!options.modelType && cfg.defaultModelType === "auto" && cfg.groqApiKey);
+    
+  if (willUseGroq && cfg.groqApiKey) {
+    const daily = await checkDailyExhaustion(anticipatedSeconds);
+    if (daily.requestsExhausted) {
+      return reply.code(429).send({ error: "Daily request quota (2000) exhausted. Try tomorrow." });
     }
+    if (daily.audioSecondsExhausted) {
+      return reply.code(429).send({ error: "Daily audio seconds quota (28800s) exhausted. Try tomorrow." });
+    }
+    
+    // Reserve only if we actually start processing
+    await reserveForGroq(anticipatedSeconds || 0);
+  }
+
+  try {
+    const result = await processTranscription(id, youtubeUrl, options);
+    return reply.code(200).send({ id, result });
+  } catch (error: any) {
+    app.log.error({ error, id }, "Transcription failed");
+    return reply.code(500).send({ error: error.message || "Transcription failed" });
+  }
 });
 
-app.get("/v1/test", async (req, reply) => {
-    reply.send({ ok: true });
-});
-
-// Asynchronous endpoint for creating a transcription job
-app.post("/v1/async/transcripts", async (req, reply) => {
-    app.log.info("Handling POST /v1/async/transcripts");
-    const q = req.query as any;
-    const modelParam = q?.model as string | undefined;
-    const langParam = q?.language as string | undefined;
-
-    let youtubeUrl: string;
-    let options: { language?: string; model?: string } = {};
-
-    const hasJsonBody =
-      req.headers["content-type"]?.includes("application/json") &&
-      req.body &&
-      Object.keys(req.body as any).length > 0;
-
-    if (hasJsonBody) {
-      const parsed = CreateSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return reply.code(400).send({ error: parsed.error.issues });
-      }
-      const body = parsed.data as CreateTranscriptRequest;
-      youtubeUrl = body.youtubeUrl;
-      options = {
-        language: body.options?.language || langParam,
-        model: body.options?.model || modelParam,
-      };
-    } else {
-      const url = q?.youtubeUrl || q?.url;
-      if (!url)
-        return reply.code(400).send({ error: "youtubeUrl or url is required" });
-
-      youtubeUrl = url;
-      options = {
-        language: langParam,
-        model: modelParam,
-      };
-    }
-
-    const jobId = newJobId();
-
-    // Add job to the queue
-    await transcriptionQueue.add('transcribe', {
-      jobId,
-      youtubeUrl,
-      opts: options,
-    }, { jobId });
-
-    // Track the last 50 jobs
-    const jobListKey = 'jobs:recent';
-    await redis.lpush(jobListKey, jobId);
-    await redis.ltrim(jobListKey, 0, 49);
-
-    reply.code(202).send({
-      jobId,
-      message: "Job accepted for processing.",
-      statusUrl: `http://${req.hostname}/v1/async/transcripts/status/${jobId}`,
-    });
-});
-
-// Endpoint to get the status of a job
-app.get("/v1/async/transcripts/status/:jobId", async (req, reply) => {
-    const { jobId } = req.params as { jobId: string };
-    const job = await transcriptionQueue.getJob(jobId);
-
-    if (!job) {
-      return reply.code(404).send({ error: "Job not found." });
-    }
-
-    const state = await job.getState();
-    const result = await redis.get(`job:${jobId}:result`);
-    const error = await redis.get(`job:${jobId}:error`);
-
-    reply.code(200).send({
-      jobId,
-      state,
-      progress: job.progress,
-      result: result ? JSON.parse(result) : null,
-      error: error ? JSON.parse(error) : null,
-      timestamp: new Date(job.timestamp).toISOString(),
-    });
-});
+// Remove these endpoints since we're synchronous only and don't store results
+// Users get the result immediately in the POST response
 
 app.get("/healthz", async () => ({ ok: true }));
 
 const start = async () => {
   try {
+    // Start the server
     await app.listen({ port: cfg.port, host: "0.0.0.0" });
     app.log.info(`listening on :${cfg.port}`);
   } catch (err) {
@@ -275,7 +341,15 @@ const start = async () => {
   }
 };
 
-process.on("SIGINT", () => process.exit(0));
-process.on("SIGTERM", () => process.exit(0));
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  app.log.info('Received SIGINT, shutting down gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  app.log.info('Received SIGTERM, shutting down gracefully...');
+  process.exit(0);
+});
 
 start();
