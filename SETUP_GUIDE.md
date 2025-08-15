@@ -23,7 +23,7 @@ First, clone the project to your local machine:
 
 ```bash
 git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
-cd transcripts-project
+cd YouTube-Transcripts-Using-Whisper
 ```
 
 ### 2. **Install Node.js Dependencies**

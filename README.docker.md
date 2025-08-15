@@ -72,13 +72,13 @@ curl "http://localhost:5685/v1/transcripts?url=https://youtube.com/watch?v=...&m
 
 ## 🏗️ Architecture Overview
 
-The Docker setup consists of two main components running inside a single container:
+The Docker setup consists of three main components:
 
-- **Node.js API (Port `5685`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service.
-- **Python ASR Service (Port `5686`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions.
-- **Redis (Port `6381`)**: A separate container that is used for rate limiting to ensure you don’t exceed the Groq API quotas.
+- **Node.js API (Port `5685`)**: The main entry point for all requests. It handles job creation, downloads audio, and communicates with the Python service. This runs in the main `transcripts-app` container.
+- **Python ASR Service (Port `5686`)**: A dedicated FastAPI server that runs the `faster-whisper` model for local, on-device transcriptions. This also runs in the main `transcripts-app` container.
+- **Redis (Port `6381`)**: A separate container that provides a fast in-memory database used for rate limiting, ensuring the service does not exceed Groq API quotas.
 
-An entrypoint script (`docker-entrypoint.sh`) manages starting both the Python and Node.js services in the correct order.
+An entrypoint script (`docker-entrypoint.sh`) inside the `transcripts-app` container manages starting both the Python and Node.js services in the correct order.
 
 ## 📦 Volumes
 

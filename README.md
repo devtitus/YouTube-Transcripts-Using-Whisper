@@ -24,7 +24,7 @@ First, clone the project and create your environment file from the example:
 
 ```bash
 git clone https://github.com/devtitus/YouTube-Transcripts-Using-Whisper.git
-cd transcripts_project
+cd YouTube-Transcripts-Using-Whisper
 cp .env.docker .env
 ```
 

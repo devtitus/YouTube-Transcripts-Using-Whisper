@@ -1,6 +1,10 @@
+# Node.js
 /node_modules
 /dist
 /.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Python
 py_asr_service/venv/
@@ -8,3 +12,24 @@ py_asr_service/__pycache__/
 py_asr_service/*.pyc
 py_asr_service/.pytest_cache/
 py_asr_service/models/
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Log files
+logs/
+*.log
+
+# Temporary files
+audio_file/
+temp/
+*.tmp
+
+# Crush
+.crush/
